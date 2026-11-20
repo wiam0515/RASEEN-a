@@ -559,9 +559,8 @@ st.markdown(
 
 
 
-    st.divider()
-    uploaded_file = st.file_uploader(
-        "ارفع ملف دفتر الشروط (PDF أو صورة)",
+ st.divider()
+ uploaded_file = st.file_uploader( "ارفع ملف دفتر الشروط (PDF أو صورة)",
         type=["pdf", "png", "jpg", "jpeg"],
     )
     use_sample = st.checkbox("أو جرّب فوراً بنموذج دفتر شروط تجريبي")
