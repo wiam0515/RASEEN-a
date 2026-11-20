@@ -76,6 +76,7 @@ with st.sidebar:
             "فضاء المقاول والمتعامل الاقتصادي (B2B)",
             "فضاء الإدارة العمومية (B2G)",
         ],
+        key="mode-radio-1"
     )
     st.divider()
     uploaded_file = st.file_uploader(
@@ -324,6 +325,7 @@ with st.sidebar:
             "فضاء المقاول والمتعامل الاقتصادي (B2B)",
             "فضاء الإدارة العمومية (B2G)",
         ],
+        key="mode-radio-2"
     )
     st.divider()
     uploaded_file = st.file_uploader(
@@ -572,6 +574,7 @@ with st.sidebar:
             "فضاء المقاول والمتعامل الاقتصادي (B2B)",
             "فضاء الإدارة العمومية (B2G)",
         ],
+        key="mode-radio-3"
     )
     st.divider()
     uploaded_file = st.file_uploader(
