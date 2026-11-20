@@ -58,7 +58,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
+st.markdown(
+    """
+<div class="header-box">
+    <h1>⚖️ RASEEN AI — منصة رصين للتدقيق القانوني والصفقات العمومية</h1>
+    <p>منصة ذكاء اصطناعي متكاملة (B2B &amp; B2G) — متوافقة مع القانون 23-12، القانون 06-01، وحماية المعطيات (القانون 18-07 المعدل بالقانون 25-11)</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.header("إعدادات التجريب")
@@ -306,7 +314,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
+st.markdown(
+    """
+<div class="header-box">
+    <h1>⚖️ RASEEN AI — منصة رصين للتدقيق القانوني والصفقات العمومية</h1>
+    <p>منصة ذكاء اصطناعي متكاملة (B2B &amp; B2G) — متوافقة مع القانون 23-12، القانون 06-01، وحماية المعطيات (القانون 18-07 المعدل بالقانون 25-11)</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.header("إعدادات التجريب")
@@ -554,7 +570,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
+st.markdown(
+    """
+<div class="header-box">
+    <h1>⚖️ RASEEN AI — منصة رصين للتدقيق القانوني والصفقات العمومية</h1>
+    <p>منصة ذكاء اصطناعي متكاملة (B2B &amp; B2G) — متوافقة مع القانون 23-12، القانون 06-01، وحماية المعطيات (القانون 18-07 المعدل بالقانون 25-11)</p>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.header("إعدادات التجريب")
