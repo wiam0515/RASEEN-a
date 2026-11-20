@@ -88,6 +88,8 @@ with st.sidebar:
     st.caption("• القانون 18-07 (المعدل بالقانون 25-11) لحماية المعطيات")
 
 doc_name = None
+
+uploaded_file = None
 if uploaded_file is not None:
     doc_name = uploaded_file.name
 elif use_sample:
