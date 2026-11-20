@@ -318,13 +318,7 @@ st.markdown(
 
 with st.sidebar:
     st.header("إعدادات التجريب")
-    mode = st.radio(
-        "اختر مسار الاستخدام:",
-        [
-            "فضاء المقاول والمتعامل الاقتصادي (B2B)",
-            "فضاء الإدارة العمومية (B2G)",
-        ],
-    )
+    
     st.divider()
     uploaded_file = st.file_uploader(
         "ارفع ملف دفتر الشروط (PDF أو صورة)",
@@ -564,15 +558,7 @@ st.markdown(
 
 
 
-with st.sidebar:
-    st.header("إعدادات التجريب")
-    mode = st.radio(
-        "اختر مسار الاستخدام:",
-        [
-            "فضاء المقاول والمتعامل الاقتصادي (B2B)",
-            "فضاء الإدارة العمومية (B2G)",
-        ],
-    )
+
     st.divider()
     uploaded_file = st.file_uploader(
         "ارفع ملف دفتر الشروط (PDF أو صورة)",
