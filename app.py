@@ -7,7 +7,8 @@ import streamlit as st
 from pypdf import PdfReader
 from docx import Document
 from PIL import Image
-from fpdf import FPDF
+from fpdf import FPDF 
+
 
 try:
     from groq import Groq
