@@ -303,4 +303,320 @@ def build_system_prompt(language: str, circuit: str, has_contractor_file: bool) 
    - 🔴 أحمر: خطأ (مخالفة قانونية أو خلل جسيم أو نقص مؤثر في الوثائق أو التواقيع أو الشروط).
    - 🟠 برتقالي: تنبيه (نقطة تحتاج إلى مراجعة أو توضيح أو استكمال أو تحقق إضافي).
    - 🟢 أخضر: صحيح (بند أو وثيقة أو توقيع أو إجراء مطابق ومستوفٍ).
-2. تحديد العدد الدقيق في بداية التقرير: يجب أن يبدأ التقرير بفقرة أو جدول "حصيلة الإشارات الضوئية بالأرقام" يذكر صراحة عدد الأخطاء الجسيمة (🔴 أحمر: خطأ)، وعدد التنبيهات (🟠 برتقالي: تنبيه)، وعدد البنود الصحيحة (
+2. تحديد العدد الدقيق في بداية التقرير: يجب أن يبدأ التقرير بفقرة أو جدول "حصيلة الإشارات الضوئية بالأرقام" يذكر صراحة عدد الأخطاء الجسيمة (🔴 أحمر: خطأ)، وعدد التنبيهات (🟠 برتقالي: تنبيه)، وعدد البنود الصحيحة (🟢 أخضر: صحيح)، بحيث يطابق العدد المذكور عدد العناصر المفصّلة في التقرير.
+3. عند ظهور أي (🔴 أحمر: خطأ) أو (🟠 برتقالي: تنبيه): يجب فوراً ذكر القانون أو النص القانوني الصحيح الواجب تطبيقه من المدونة القانونية المعتمدة مع بيان الحكم القانوني الصحيح.
+4. في كل حالة تتعلق بالإلغاء (إلغاء الإجراء، إلغاء الصفقة أو المناقصة، إلغاء العقد أو الفسخ أو الإبطال، أو إلغاء بند أو شرط أو عرض أو وثيقة أو توقيع): يجب تحديد القانون الصحيح الواجب تطبيقه بوضوح، وبيان الشروط والأحكام القانونية الصحيحة للإلغاء وآثاره.
+""".strip()
+
+    if circuit.startswith("B2G"):
+        circuit_rule = """
+المسار المختار هو B2G (الصفقات العمومية والمناقصات العمومية):
+ابدأ بحصيلة عددية واضحة (عدد 🔴 أحمر: خطأ، عدد 🟠 برتقالي: تنبيه، عدد 🟢 أخضر: صحيح)، ثم فصّل كل خطأ جسيم وكل تنبيه وكل بند صحيح مع ذكر القانون الصحيح الواجب تطبيقه، وخصص قسماً واضحاً لحالات الإلغاء والقانون الصحيح الواجب تطبيقه فيها.
+""".strip()
+    elif has_contractor_file:
+        circuit_rule = """
+المسار المختار هو B2B (دراسة دفتر الشروط / العقد ومقارنته بملف المقاول أو المؤسسة الاقتصادية المرفوع):
+يستفيد من هذا المسار: المقاولون والمؤسسات الاقتصادية، المؤسسات الناشئة وحاملو المشاريع المبتكرة، شركات المساهمة البسيطة والشركات التجارية، مكاتب الدراسات والاستشارة، المتعاملون من الباطن، والمستشارون القانونيون ومديرو العقود.
+ابدأ بحصيلة عددية واضحة (عدد 🔴 أحمر: خطأ، عدد 🟠 برتقالي: تنبيه، عدد 🟢 أخضر: صحيح)، ثم قارن بدقة بين متطلبات دفتر الشروط أو العقد وبين ما يملكه المقاول أو المؤسسة الاقتصادية من وثائق وتواقيع، مع التركيز على:
+- السجل التجاري، البطاقة الجبائية والرقم الإحصائي وشهادات الأداء والضرائب، شهادات شبه الضمان الاجتماعي، القانون الأساسي وتفويض التوقيع، شهادات التأهيل والتصنيف أو الاعتماد، المراجع المهنية والقدرات، والتواقيع والأختام والتصريحات.
+ووضّح هل يناسب دفتر الشروط هذا العميل أم لا، مع ذكر القانون الصحيح الواجب تطبيقه فوراً عند أي خطأ أو تنبيه أو حالة إلغاء.
+""".strip()
+    else:
+        circuit_rule = """
+المسار المختار هو B2B (فهم دفتر الشروط / العقد وكشف ثغراته ومدى ملاءمته للعميل بدون رفع ملفه الخاص):
+يستفيد من هذا المسار: المقاولون والمؤسسات الاقتصادية، المؤسسات الناشئة وحاملو المشاريع المبتكرة، شركات المساهمة البسيطة والشركات التجارية، مكاتب الدراسات والاستشارة، المتعاملون من الباطن، والمستشارون القانونيون ومديرو العقود.
+العميل لم يرفع ملفه الخاص بعد؛ لذلك يجب:
+1. البدء بحصيلة عددية واضحة (عدد 🔴 أحمر: خطأ، عدد 🟠 برتقالي: تنبيه، عدد 🟢 أخضر: صحيح).
+2. شرح مضمون دفتر الشروط أو العقد بوضوح وكشف ثغراته القانونية والتعاقدية والتنظيمية دون اشتراط رفع ملف العميل.
+3. الإجابة بوضوح: هل يلائم هذا الدفتر أو العقد هذه الفئة من العملاء أم لا وما هي الشروط أو المخاطر التي ينبغي الانتباه إليها قبل المشاركة أو التعاقد؟
+4. بيان الوثائق الأساسية (السجل التجاري، الضرائب، شبه الضمان الاجتماعي، القانون الأساسي، التأهيل، المراجع، والتواقيع والأختام) التي سيحتاجها العميل إذا قرر المشاركة، مع ذكر القانون الصحيح الواجب تطبيقه في كل خطأ أو تنبيه أو حالة إلغاء.
+""".strip()
+
+    return f"""
+أنت المستشار القانوني الذكي لمنصة رصين AI المتخصصة في تدقيق العقود والصفقات العمومية والمناقصات وفق القانون الجزائري.
+{lang_rule}
+
+{mandatory_rules}
+
+{circuit_rule}
+
+المرجعية القانونية المعتمدة:
+{LEGAL_REFERENCES_CORPUS}
+""".strip()
+
+
+def build_text_prompt(
+    language: str,
+    circuit: str,
+    sector: str,
+    b2b_profile: str,
+    tender_label: str,
+    tender_text: str,
+    contractor_summary: str,
+) -> str:
+    safe_tender_text = _trim_text(tender_text, MAX_TENDER_CHARS)
+    user_content = f"""
+اللغة المطلوبة: {language}
+المسار: {circuit}
+القطاع: {sector}
+ملف دفتر الشروط / العقد / المناقصة: {tender_label}
+
+محتوى دفتر الشروط / العقد / المناقصة:
+\"\"\"
+{safe_tender_text}
+\"\"\"
+""".strip()
+
+    if circuit.startswith("B2B"):
+        user_content += f"""
+
+الفئة المستفيدة في مسار B2B: {b2b_profile}
+الوثائق الأساسية ذات الصلة: {", ".join(B2B_KEY_DOCUMENTS)}
+
+ملف المقاول / المؤسسة الاقتصادية المرفوع:
+\"\"\"
+{contractor_summary if contractor_summary else "لم يرفع العميل ملفه الخاص؛ قم بدراسة دفتر الشروط أو العقد، وكشف ثغراته، وتوضيح مدى ملاءمته للعميل والوثائق والتواقيع المطلوبة منه مستقبلاً، مع ذكر العدد الدقيق للأخطاء الجسيمة والتنبيهات والبنود الصحيحة والقانون الصحيح الواجب تطبيقه."}
+\"\"\"
+"""
+    return user_content
+
+
+def run_audit(
+    client: Groq,
+    language: str,
+    circuit: str,
+    sector: str,
+    b2b_profile: str,
+    payload: dict,
+    contractor_summary: str,
+) -> tuple[str, str]:
+    sys_prompt = build_system_prompt(language, circuit, bool(contractor_summary))
+
+    if payload["kind"] == "text":
+        user_content = build_text_prompt(
+            language=language,
+            circuit=circuit,
+            sector=sector,
+            b2b_profile=b2b_profile,
+            tender_label=payload["label"],
+            tender_text=payload["text"],
+            contractor_summary=contractor_summary,
+        )
+        models_to_try = get_available_models_order(client, CANDIDATE_TEXT_MODELS, vision_only=False)
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.2,
+                )
+                content = (completion.choices[0].message.content or "").strip()
+                if content:
+                    return content, model_name
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise RuntimeError(f"تعذر تشغيل التدقيق النصي على Groq. آخر خطأ: {last_error}")
+
+    vision_instruction = build_text_prompt(
+        language=language,
+        circuit=circuit,
+        sector=sector,
+        b2b_profile=b2b_profile,
+        tender_label=payload["label"],
+        tender_text="[اقرأ النص الموجود في الصورة/الصور المرفقة لدفتر الشروط أو العقد أو المناقصة بدقة ثم قم بتدقيقه قانونياً]",
+        contractor_summary=contractor_summary,
+    )
+    content_blocks = [{"type": "text", "text": vision_instruction}]
+    for mime_type, b64_str in payload["images"]:
+        content_blocks.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime_type};base64,{b64_str}"},
+            }
+        )
+
+    vision_models = get_available_models_order(client, CANDIDATE_VISION_MODELS, vision_only=True)
+    last_error = None
+    for v_model in vision_models:
+        try:
+            completion = client.chat.completions.create(
+                model=v_model,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": content_blocks},
+                ],
+                temperature=0.2,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return content, v_model
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise RuntimeError(
+        "الملف المرفوع عبارة عن صورة أو PDF مصور ولا يحتوي على نص قابل للنسخ، ونماذج الرؤية غير متاحة حالياً. يُرجى رفع ملف PDF نصي أو لصق نص الوثيقة في خانة النص البديلة أدناه."
+    )
+
+
+st.markdown(CUSTOM_STYLES, unsafe_allow_html=True)
+
+st.markdown(
+    f"""
+    <div class="raseen-hero">
+        <div>{RASEEN_LOGO_SVG}</div>
+        <div>
+            <h1 class="raseen-hero-title">منصة التدقيق القانوني الذكي — المستشار القانوني الذكي رصين AI</h1>
+            <p class="raseen-hero-sub">خاص بتدقيق العقود والصفقات العمومية والمناقصات</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+with st.sidebar:
+    st.subheader("اختيار اللغة")
+    selected_language = st.selectbox(
+        "اللغة",
+        options=["العربية", "Français", "ثنائي اللغة (عربي / فرنسي)"],
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+    st.subheader("إعدادات المسار والقطاع")
+    circuit = st.selectbox(
+        "المسار",
+        options=["B2G (الصفقات العمومية والمناقصات)", "B2B (ملف المقاول / المؤسسة الاقتصادية)"],
+    )
+    sector = st.selectbox(
+        "القطاع",
+        options=[
+            "البناء والأشغال العمومية (Travaux)",
+            "الخدمات العامة (Services Publics)",
+            "التوريدات والمعدات (Fournitures)",
+            "الرقمنة والخدمات التقنية",
+        ],
+    )
+
+st.subheader("تحميل دفتر الشروط / العقد / المناقصة (PDF أو صورة)")
+tender_file = st.file_uploader(
+    "اختر ملف دفتر الشروط أو العقد أو المناقصة (PDF أو JPG / PNG)",
+    type=["pdf", "png", "jpg", "jpeg"],
+    key="tender_file",
+)
+
+with st.expander("إدخال نص الوثيقة يدوياً (إذا كان الملف مصوراً بدون نص قابل للنسخ)"):
+    manual_tender_text = st.text_area(
+        "الصق نص دفتر الشروط أو العقد هنا في حال تعذر استخراج النص تلقائياً من الصورة أو PDF المصور",
+        height=140,
+        key="manual_tender_text",
+    )
+
+b2b_profile = B2B_TARGET_USERS[0]
+contractor_files = []
+
+if circuit.startswith("B2B"):
+    st.divider()
+    st.markdown("### الفئات المستفيدة والوثائق المطلوب مطابقتها مع دفتر الشروط (B2B)")
+    b2b_profile = st.selectbox("اختر الفئة المستفيدة في مسار B2B", options=B2B_TARGET_USERS)
+
+    info_col1, info_col2 = st.columns(2)
+    with info_col1:
+        users_html = "".join(f"<li>{item}</li>" for item in B2B_TARGET_USERS)
+        st.markdown(
+            f"""
+            <div class="raseen-card">
+                <h4>من يحتاج هذا التطبيق في مسار B2B؟</h4>
+                <ul>{users_html}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with info_col2:
+        docs_html = "".join(f"<li>{doc}</li>" for doc in B2B_KEY_DOCUMENTS)
+        st.markdown(
+            f"""
+            <div class="raseen-card raseen-card-gold">
+                <h4>الوثائق المهمة لمطابقتها مع دفتر الشروط</h4>
+                <ul>{docs_html}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.subheader("تحميل ملف المقاول أو المؤسسة الاقتصادية (اختياري — يمكنكِ دراسة دفتر الشروط وفهم ثغراته بدون رفع ملفكِ)")
+    contractor_files = st.file_uploader(
+        "ارفع وثائق وتواقيع المقاول أو المؤسسة الاقتصادية إذا أردتِ المقارنة المباشرة (السجل التجاري، الشهادات، القانون الأساسي، التواقيع — PDF أو صور)",
+        type=["pdf", "png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        key="contractor_files",
+    )
+
+if st.button("تشغيل التدقيق القانوني", type="primary", use_container_width=True):
+    if tender_file is None and not manual_tender_text.strip():
+        st.warning("يرجى تحميل ملف دفتر الشروط أو العقد أو المناقصة (أو لصق نص الوثيقة) أولاً.")
+        st.stop()
+
+    try:
+        payload = prepare_tender_payload(tender_file, manual_tender_text)
+    except Exception as exc:
+        st.error(f"تعذر قراءة الملف المرفوع: {exc}")
+        st.stop()
+
+    if payload["kind"] == "empty":
+        st.error(
+            f"الملف ({payload['label']}) مصور ولا يحتوي على نص رقمي مباشر. افتحي (إدخال نص الوثيقة يدوياً) والصقي نص الوثيقة هناك، أو ارفعي ملف PDF نصياً."
+        )
+        st.stop()
+
+    contractor_text = ""
+    if circuit.startswith("B2B"):
+        contractor_text = extract_contractor_files_text(contractor_files)
+        if not contractor_files:
+            st.info(
+                "تم اختيار دراسة دفتر الشروط وفهم ثغراته ومدى ملاءمته للعميل دون اشتراط رفع ملف المقاول أو المؤسسة الاقتصادية."
+            )
+
+    st.markdown("### الإشارات الضوئية للتدقيق القانوني")
+    col_red, col_amber, col_green = st.columns(3)
+    with col_red:
+        st.error("🔴 أحمر: خطأ جسيم + القانون الصحيح الواجب تطبيقه")
+    with col_amber:
+        st.warning("🟠 برتقالي: تنبيه + القانون الصحيح الواجب تطبيقه")
+    with col_green:
+        st.success("🟢 أخضر: صحيح")
+
+    with st.spinner("جاري إجراء التدقيق القانوني عبر الذكاء الاصطناعي..."):
+        try:
+            groq_client = get_groq_client()
+            report, used_model = run_audit(
+                client=groq_client,
+                language=selected_language,
+                circuit=circuit,
+                sector=sector,
+                b2b_profile=b2b_profile,
+                payload=payload,
+                contractor_summary=contractor_text,
+            )
+
+            red_cnt, amber_cnt, green_cnt = count_traffic_signals(report)
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("عدد الأخطاء الجسيمة (🔴 أحمر)", red_cnt)
+            with m2:
+                st.metric("عدد التنبيهات (🟠 برتقالي)", amber_cnt)
+            with m3:
+                st.metric("عدد البنود الصحيحة (🟢 أخضر)", green_cnt)
+
+            st.caption(f"النموذج المنفّذ: {used_model} | الملف: {payload['label']}")
+            st.markdown("### تقرير المستشار القانوني الذكي — رصين AI")
+            st.markdown(report)
+            with st.expander("المرجعية القانونية المعتمدة في التدقيق"):
+                st.text(LEGAL_REFERENCES_CORPUS)
+        except Exception as exc:
+            st.error(f"حدث خطأ أثناء تنفيذ التدقيق: {exc}") 
