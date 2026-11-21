@@ -1,6 +1,7 @@
 import base64
 import io
 import os
+import re
 import zipfile
 import streamlit as st
 from pypdf import PdfReader
@@ -21,7 +22,7 @@ except ImportError:
     HAS_OCR = False
 
 st.set_page_config(
-    page_title="رصين AI — التدقيق القانوني",
+    page_title="رصين AI — Raseen AI",
     page_icon="⚖️",
     layout="centered",
 )
@@ -38,94 +39,118 @@ PREFERRED_VISION_MODELS = [
     "llama-3.2-11b-vision-preview",
 ]
 
-B2B_CATEGORIES = [
-    "المقاولون والمؤسسات الاقتصادية (مقاولة، مناولة، شراكة)",
-    "المؤسسات الناشئة وشركات المساهمة البسيطة",
-    "عقود التوريد والتجهيز والخدمات بين المؤسسات",
-    "التعاقد والمعاملات الإلكترونية وحماية المعطيات",
-]
-
-SPECIALTY_OPTIONS = [
-    "الصفقات العمومية — البناء",
-    "الصفقات العمومية — التجهيز",
-    "الصفقات العمومية — التوريد",
-    "الصفقات العمومية — الخدمات",
-    "المؤسسات الاقتصادية والمقاولون",
-    "المؤسسات الناشئة وشركات المساهمة البسيطة",
-]
-
-LAW_REFERENCE_OPTIONS = [
-    "الصفقات العمومية — القانون 23-12",
-    "الوقاية من الفساد ومكافحته — القانون 06-01",
-    "شركة المساهمة البسيطة — القانون 22-09",
-    "التوقيع والتصديق الإلكتروني — القانون 15-04",
-    "المعاملات الإلكترونية — القانون 18-05 (والنصوص ذات الصلة مثل 26-02)",
-    "حماية المعطيات ذات الطابع الشخصي — القانون 18-07",
-]
-
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Cairo', sans-serif;
-    }
-    .main .block-container {
-        max-width: 760px;
-        padding-top: 1.2rem;
-        padding-bottom: 3rem;
-    }
-    .top-banner {
-        background: #18222f;
-        color: #f8fafc;
-        padding: 1.2rem 1.35rem;
-        border-radius: 14px;
-        margin-bottom: 0.95rem;
-    }
-    .top-title {
-        font-size: 1.38rem;
-        font-weight: 800;
-        margin: 0 0 0.25rem 0;
-    }
-    .top-sub {
-        font-size: 0.88rem;
-        color: #cbd5e1;
-        margin: 0;
-        line-height: 1.5;
-    }
-    .legend-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.55rem;
-        margin-bottom: 1rem;
-    }
-    .legend-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 0.55rem 0.65rem;
-        text-align: center;
-        font-size: 0.83rem;
-        font-weight: 700;
-        color: #0f172a;
-    }
-    .stButton > button, .stDownloadButton > button {
-        width: 100%;
-        border-radius: 10px;
-        min-height: 2.8rem;
-        font-weight: 700;
-        font-family: 'Cairo', sans-serif;
-    }
-    @media (max-width: 640px) {
-        .legend-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+UI_STRINGS = {
+    "العربية": {
+        "dir": "rtl",
+        "align": "right",
+        "badge": "رصين AI • التدقيق والامتثال القانوني",
+        "title": "⚖️ رصين AI — منصة التدقيق والامتثال القانوني",
+        "subtitle": "تحليل النصوص والوثائق في الجزائر وفق المسار، الاختصاص، ومرجع القانون — مع عرض كل بند في فقرة واضحة.",
+        "red_label": "أحمر — خطأ",
+        "orange_label": "برتقالي — تنبيه",
+        "green_label": "أخضر — صحيح",
+        "settings_title": "⚙️ الإعدادات",
+        "track_label": "المسار",
+        "b2b_label": "تقسيم B2B حسب النوع",
+        "lang_label": "اللغة / Langue",
+        "specialty_label": "الاختصاص",
+        "law_label": "مرجع القانون",
+        "api_label": "مفتاح GROQ_API_KEY",
+        "context_label": "سياق إضافي (اختياري)",
+        "context_ph": "مثال: دفتر شروط بناء أو تجهيز أو توريد، عقد مقاولة، شركة مساهمة بسيطة...",
+        "text_label": "النص القانوني أو البند المراد تدقيقه",
+        "text_ph": "اكتبي أو الصقي النص القانوني هنا...",
+        "upload_label": "إرفاق ملف أو وثيقة (اختياري — غير إجباري للمتعامل)",
+        "run_btn": "🚀 تشغيل التدقيق القانوني",
+        "spinner": "جاري قراءة المعطيات وإعداد تقرير التدقيق...",
+        "missing_key": "يرجى ضبط GROQ_API_KEY في Streamlit Secrets أو إدخاله في الإعدادات.",
+        "missing_groq": "مكتبة groq غير مثبّتة.",
+        "empty_input": "أدخلي نصاً قانونياً أو أرفقي ملفاً اختيارياً واحداً على الأقل.",
+        "report_heading": "📄 تقرير التدقيق القانوني (فقرات واضحة)",
+        "download_heading": "⬇️ تحميل التقرير",
+        "dl_docx": "تحميل Word (.docx)",
+        "dl_pdf": "تحميل PDF (.pdf)",
+        "dl_txt": "تحميل نص (.txt)",
+        "dl_zip": "تحميل حزمة كاملة (.zip)",
+        "b2b_types": [
+            "المقاولون والمؤسسات الاقتصادية (مقاولة، مناولة، شراكة)",
+            "المؤسسات الناشئة وشركات المساهمة البسيطة",
+            "عقود التوريد والتجهيز والخدمات بين المؤسسات",
+            "التعاقد والمعاملات الإلكترونية وحماية المعطيات",
+        ],
+        "specialties": [
+            "الصفقات العمومية — البناء",
+            "الصفقات العمومية — التجهيز",
+            "الصفقات العمومية — التوريد",
+            "الصفقات العمومية — الخدمات",
+            "المؤسسات الاقتصادية والمقاولون",
+            "المؤسسات الناشئة وشركات المساهمة البسيطة",
+        ],
+        "laws": [
+            "الصفقات العمومية — القانون 23-12",
+            "الوقاية من الفساد ومكافحته — القانون 06-01",
+            "شركة المساهمة البسيطة — القانون 22-09",
+            "التوقيع والتصديق الإلكتروني — القانون 15-04",
+            "المعاملات الإلكترونية — القانون 18-05 (والنصوص ذات الصلة مثل 26-02)",
+            "حماية المعطيات ذات الطابع الشخصي — القانون 18-07",
+        ],
+    },
+    "Français": {
+        "dir": "ltr",
+        "align": "left",
+        "badge": "RASEEN AI • AUDIT & CONFORMITÉ JURIDIQUE",
+        "title": "⚖️ Raseen AI — Audit et Conformité Juridique",
+        "subtitle": "Analyse des textes et documents en Algérie selon le parcours, la spécialité et la référence juridique — en paragraphes clairs.",
+        "red_label": "Rouge — Erreur",
+        "orange_label": "Orange — Avertissement",
+        "green_label": "Vert — Conforme",
+        "settings_title": "⚙️ Paramètres",
+        "track_label": "Parcours",
+        "b2b_label": "Classification B2B par type",
+        "lang_label": "Langue / اللغة",
+        "specialty_label": "Spécialité",
+        "law_label": "Référence juridique",
+        "api_label": "Clé GROQ_API_KEY",
+        "context_label": "Contexte complémentaire (optionnel)",
+        "context_ph": "Ex. : cahier des charges (travaux, équipement, fourniture), contrat, SPA...",
+        "text_label": "Texte ou clause juridique à auditer",
+        "text_ph": "Saisissez ou collez le texte juridique ici...",
+        "upload_label": "Joindre un document ou fichier (optionnel — non obligatoire)",
+        "run_btn": "🚀 Lancer l'audit juridique",
+        "spinner": "Extraction des données et génération du rapport d'audit...",
+        "missing_key": "Veuillez configurer GROQ_API_KEY dans Streamlit Secrets ou dans les paramètres.",
+        "missing_groq": "La bibliothèque groq n'est pas installée.",
+        "empty_input": "Veuillez saisir un texte juridique ou joindre au moins un fichier optionnel.",
+        "report_heading": "📄 Rapport d'audit juridique (paragraphes détaillés)",
+        "download_heading": "⬇️ Télécharger le rapport",
+        "dl_docx": "Télécharger Word (.docx)",
+        "dl_pdf": "Télécharger PDF (.pdf)",
+        "dl_txt": "Télécharger texte (.txt)",
+        "dl_zip": "Télécharger l'archive complète (.zip)",
+        "b2b_types": [
+            "Entrepreneurs et opérateurs économiques (entreprise, sous-traitance, partenariat)",
+            "Start-ups et sociétés par actions simplifiées (SAS)",
+            "Contrats de fourniture, d'équipement et de services interentreprises",
+            "Transactions électroniques, signature et protection des données",
+        ],
+        "specialties": [
+            "Marchés publics — Bâtiment et travaux",
+            "Marchés publics — Équipement",
+            "Marchés publics — Fourniture",
+            "Marchés publics — Services",
+            "Opérateurs économiques et entrepreneurs",
+            "Start-ups et sociétés par actions simplifiées",
+        ],
+        "laws": [
+            "Marchés publics — Loi 23-12",
+            "Prévention et lutte contre la corruption — Loi 06-01",
+            "Société par actions simplifiée — Loi 22-09",
+            "Signature et certification électroniques — Loi 15-04",
+            "Transactions électroniques — Loi 18-05 (et textes connexes tels que 26-02)",
+            "Protection des données à caractère personnel — Loi 18-07",
+        ],
+    },
+}
 
 
 def get_groq_api_key() -> str:
@@ -177,20 +202,37 @@ def build_prompt_system(
     specialty: str,
     law_reference: str,
 ) -> str:
-    b2b_part = f"\n- تصنيف B2B: {b2b_category}" if track == "B2B" and b2b_category else ""
+    b2b_part = f"\n- التصنيف الفرعي لـ B2B: {b2b_category}" if track == "B2B" and b2b_category else ""
+    if language == "Français":
+        return (
+            f"Tu es un conseiller juridique expert de la plateforme 'Raseen AI' dédiée à l'audit et à la conformité juridique en Algérie.\n"
+            f"Rédige impérativement tout le rapport en FRANÇAIS.\n"
+            f"- Parcours: {track}{b2b_part}\n"
+            f"- Spécialité: {specialty}\n"
+            f"- Référence juridique retenue: {law_reference}\n\n"
+            "Présente le rapport sous forme de PARAGRAPHES CLAIRS (sans tableaux larges) :\n"
+            "1. Un paragraphe de synthèse générale.\n"
+            "2. Chaque point d'audit dans un PARAGRAPHE DISTINCT commençant obligatoirement par l'un des marqueurs suivants :\n"
+            "   - 🔴 Erreur : [analyse juridique et référence légale algérienne exacte].\n"
+            "   - 🟠 Avertissement : [point de vigilance, réserve ou vérification à effectuer].\n"
+            "   - 🟢 Conforme : [disposition conforme aux règles applicables].\n"
+            "3. Un paragraphe de recommandation pratique finale.\n\n"
+            "Règle stricte : n'invente et ne modifie aucun numéro ou année de loi ; utilise uniquement les références exactes "
+            "(23-12, 06-01, 22-09, 15-04, 18-05, 26-02, 18-07) ou mentionne l'intitulé sans numéro incertain."
+        )
     return (
         f"أنت مستشار قانوني متخصص في منصة 'رصين AI' للتدقيق والامتثال القانوني في الجزائر.\n"
-        f"لغة التقرير: {language}.\n"
+        f"اكتب كامل التقرير باللغة العربية الفصحى الواضحة.\n"
         f"- المسار: {track}{b2b_part}\n"
         f"- الاختصاص: {specialty}\n"
         f"- مرجع القانون المعتمد: {law_reference}\n\n"
-        "اكتب التقرير بوضوح واختصار منظم:\n"
-        "1. ملخص تنفيذي.\n"
-        "2. نقاط التدقيق بالإشارات اللونية:\n"
-        "   - 🔴 مخالفة أو إشكال قانوني (مع ذكر المرجع القانوني الجزائري بدقة).\n"
-        "   - 🟠 تنبيه أو تحفظ يحتاج مراجعة.\n"
-        "   - 🟢 بند متوافق وسليم.\n"
-        "3. توصيات عملية للتصحيح.\n\n"
+        "اكتب التقرير على شكل فقرات واضحة ومستقلة لكل نقطة أو بند (تجنّب الجداول العريضة):\n"
+        "1. فقرة موجزة للملخص العام.\n"
+        "2. اجعل كل نقطة تدقيق في فقرة مستقلة تبدأ بوضوح بأحد الوسوم التالية:\n"
+        "   - 🔴 خطأ: [شرح المخالفة أو الإشكال القانوني مع ذكر المرجع القانوني الجزائري المناسب].\n"
+        "   - 🟠 تنبيه: [ملاحظة أو تحفظ أو إجراء يحتاج مراجعة].\n"
+        "   - 🟢 صحيح: [بند متوافق وسليم قانوناً].\n"
+        "3. فقرة ختامية تتضمن التوصية العملية للمتعامل.\n\n"
         "تنبيه إلزامي: لا تخترع أو تغيّر أرقام القوانين أو سنواتها؛ التزم حصراً بالأرقام والمرجعيات الصحيحة "
         "(مثل 23-12، 06-01، 22-09، 15-04، 18-05، 26-02، 18-07) ولا تكتب أرقام قوانين غير متأكد منها."
     )
@@ -212,8 +254,8 @@ def run_audit_engine(
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg},
                 ],
-                temperature=0.2,
-                max_tokens=2800,
+                temperature=0.25,
+                max_tokens=3000,
             )
             content = (res.choices[0].message.content or "").strip()
             if content:
@@ -311,20 +353,110 @@ def read_uploaded_files(files, api_key: str, vision_candidates: list[str]) -> st
     return "\n\n".join(sections)
 
 
+def classify_paragraph_color(para: str) -> str:
+    low = para.lower()
+    if (
+        "🔴" in para
+        or re.search(r"(^|\s)(خطأ|مخالفة|غير قانوني|باطل|erreur|illégal|infraction)\b", low)
+    ):
+        return "red"
+    if (
+        "🟠" in para
+        or re.search(r"(^|\s)(تنبيه|تحفظ|مراجعة|avertissement|alerte|réserve|vigilance)\b", low)
+    ):
+        return "orange"
+    if (
+        "🟢" in para
+        or re.search(r"(^|\s)(صحيح|متوافق|سليم|conforme|valide)\b", low)
+    ):
+        return "green"
+    return "neutral"
+
+
+def render_colored_paragraphs(report_text: str, language: str):
+    is_ar = language == "العربية"
+    dir_attr = "rtl" if is_ar else "ltr"
+    align_css = "right" if is_ar else "left"
+
+    styles_map = {
+        "red": {
+            "bg": "#fef2f2",
+            "border": "#dc2626",
+            "badge": "أحمر — خطأ" if is_ar else "Rouge — Erreur",
+            "badge_bg": "#fee2e2",
+            "badge_fg": "#991b1b",
+        },
+        "orange": {
+            "bg": "#fff7ed",
+            "border": "#ea580c",
+            "badge": "برتقالي — تنبيه" if is_ar else "Orange — Avertissement",
+            "badge_bg": "#ffedd5",
+            "badge_fg": "#9a3412",
+        },
+        "green": {
+            "bg": "#f0fdf4",
+            "border": "#16a34a",
+            "badge": "أخضر — صحيح" if is_ar else "Vert — Conforme",
+            "badge_bg": "#dcfce7",
+            "badge_fg": "#166534",
+        },
+        "neutral": {
+            "bg": "#f8fafc",
+            "border": "#475569",
+            "badge": None,
+            "badge_bg": "#e2e8f0",
+            "badge_fg": "#1e293b",
+        },
+    }
+
+    raw_blocks = [b.strip() for b in re.split(r"\n\s*\n", report_text.strip()) if b.strip()]
+    if len(raw_blocks) == 1 and "\n" in raw_blocks[0]:
+        raw_blocks = [ln.strip() for ln in raw_blocks[0].splitlines() if ln.strip()]
+
+    for block in raw_blocks:
+        clean_block = re.sub(r"^\s*[-*•]+\s*", "", block).strip()
+        clean_block = re.sub(r"^\s*#+\s*", "", clean_block).strip()
+        if not clean_block:
+            continue
+
+        tone = classify_paragraph_color(clean_block)
+        st_cfg = styles_map[tone]
+
+        cleaned_body = re.sub(
+            r"^(🔴|🟠|🟢)\s*(خطأ|تنبيه|صحيح|erreur|avertissement|conforme)?\s*[:\-–—]?\s*",
+            "",
+            clean_block,
+            flags=re.IGNORECASE,
+        ).strip()
+        if not cleaned_body:
+            cleaned_body = clean_block
+
+        badge_html = ""
+        if st_cfg["badge"]:
+            badge_html = (
+                f'<span style="display:inline-block;background:{st_cfg["badge_bg"]};'
+                f'color:{st_cfg["badge_fg"]};font-weight:800;font-size:0.8rem;'
+                f'padding:0.18rem 0.6rem;border-radius:999px;margin-bottom:0.45rem;">'
+                f'{st_cfg["badge"]}</span><br>'
+            )
+
+        st.markdown(
+            f'<div dir="{dir_attr}" style="background:{st_cfg["bg"]};'
+            f'border-right:{"5px solid " + st_cfg["border"] if is_ar else "none"};'
+            f'border-left:{"5px solid " + st_cfg["border"] if not is_ar else "none"};'
+            f'border-radius:10px;padding:0.85rem 1rem;margin-bottom:0.75rem;'
+            f'text-align:{align_css};line-height:1.7;color:#0f172a;font-size:0.96rem;">'
+            f'{badge_html}{cleaned_body}</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def build_docx(report_text: str, meta_info: str) -> bytes:
     doc = Document()
-    doc.add_heading("تقرير التدقيق القانوني — رصين AI", level=1)
+    doc.add_heading("تقرير التدقيق القانوني — Raseen AI", level=1)
     doc.add_paragraph(meta_info)
-    for line in report_text.splitlines():
-        clean = line.strip()
-        if not clean:
-            continue
-        if clean.startswith("### "):
-            doc.add_heading(clean[4:], level=3)
-        elif clean.startswith("## "):
-            doc.add_heading(clean[3:], level=2)
-        else:
-            doc.add_paragraph(clean)
+    for para in [p.strip() for p in re.split(r"\n\s*\n", report_text.strip()) if p.strip()]:
+        doc.add_paragraph(para)
     out = io.BytesIO()
     doc.save(out)
     out.seek(0)
@@ -354,7 +486,7 @@ def build_pdf(report_text: str, meta_info: str) -> bytes | None:
     pdf.add_page()
     pdf.add_font("RaseenDocFont", "", font_path, uni=True)
     pdf.set_font("RaseenDocFont", size=13)
-    pdf.multi_cell(0, 9, "تقرير التدقيق القانوني — رصين AI")
+    pdf.multi_cell(0, 9, "تقرير التدقيق القانوني — Raseen AI")
     pdf.set_font("RaseenDocFont", size=9)
     pdf.multi_cell(0, 6, meta_info)
     pdf.ln(3)
@@ -380,16 +512,22 @@ def build_zip(report_text: str, meta_info: str, files) -> bytes:
 
 
 # ==========================================
-# جهة الإعدادات: المسار + تصنيف B2B + اللغة + الاختصاص + مرجع القانون
+# الإعدادات (مع اللغة أولاً لكي تتحدث الواجهة فوراً)
 # ==========================================
 api_key = get_groq_api_key()
 text_models, vision_models = resolve_groq_models(api_key)
 
 with st.sidebar:
-    st.markdown("## ⚙️ الإعدادات")
+    language = st.selectbox(
+        "اللغة / Langue",
+        options=["العربية", "Français"],
+    )
+    t = UI_STRINGS[language]
+
+    st.markdown(f"## {t['settings_title']}")
 
     track = st.radio(
-        "المسار",
+        t["track_label"],
         options=["B2G", "B2B"],
         horizontal=True,
     )
@@ -397,117 +535,217 @@ with st.sidebar:
     b2b_category = ""
     if track == "B2B":
         b2b_category = st.selectbox(
-            "تقسيم B2B حسب النوع",
-            options=B2B_CATEGORIES,
+            t["b2b_label"],
+            options=t["b2b_types"],
         )
 
-    language = st.selectbox(
-        "اللغة",
-        options=["العربية", "الفرنسية"],
-    )
-
     specialty = st.selectbox(
-        "الاختصاص",
-        options=SPECIALTY_OPTIONS,
+        t["specialty_label"],
+        options=t["specialties"],
     )
 
     law_reference = st.selectbox(
-        "مرجع القانون",
-        options=LAW_REFERENCE_OPTIONS,
+        t["law_label"],
+        options=t["laws"],
     )
 
     if not api_key:
         st.markdown("---")
-        st.text_input("مفتاح GROQ_API_KEY", type="password", key="manual_groq_key")
+        st.text_input(t["api_label"], type="password", key="manual_groq_key")
         api_key = get_groq_api_key()
         text_models, vision_models = resolve_groq_models(api_key)
 
+t = UI_STRINGS[language]
+is_ar = language == "العربية"
+dir_attr = t["dir"]
+align_css = t["align"]
 
 # ==========================================
-# الواجهة الرئيسية للتدقيق
+# تصميم الواجهة وتطبيق الاتجاه واللغة والألوان الثلاثة
 # ==========================================
 st.markdown(
-    """
-    <div class="top-banner">
-        <div class="top-title">⚖️ رصين AI — التدقيق القانوني</div>
-        <div class="top-sub">تدقيق النصوص والوثائق القانونية في الجزائر مع ضبط المسار، اللغة، الاختصاص، ومرجع القانون من الإعدادات.</div>
+    f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+
+    html, body, [class*="css"] {{
+        font-family: 'Cairo', sans-serif;
+    }}
+    .main .block-container {{
+        max-width: 760px;
+        padding-top: 1.2rem;
+        padding-bottom: 3rem;
+        direction: {dir_attr};
+        text-align: {align_css};
+    }}
+    .top-banner {{
+        background: #18222f;
+        color: #f8fafc;
+        padding: 1.2rem 1.35rem;
+        border-radius: 14px;
+        margin-bottom: 0.9rem;
+        text-align: {align_css};
+    }}
+    .top-badge {{
+        display: inline-block;
+        background: rgba(251, 191, 36, 0.16);
+        color: #fbbf24;
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 0.2rem 0.65rem;
+        border-radius: 999px;
+        margin-bottom: 0.45rem;
+    }}
+    .top-title {{
+        font-size: 1.35rem;
+        font-weight: 800;
+        margin: 0 0 0.25rem 0;
+    }}
+    .top-sub {{
+        font-size: 0.88rem;
+        color: #cbd5e1;
+        margin: 0;
+        line-height: 1.5;
+    }}
+    .legend-grid {{
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.55rem;
+        margin-bottom: 1rem;
+    }}
+    .legend-red {{
+        background: #fef2f2;
+        border: 1.5px solid #dc2626;
+        color: #991b1b;
+        border-radius: 10px;
+        padding: 0.6rem 0.65rem;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 800;
+    }}
+    .legend-orange {{
+        background: #fff7ed;
+        border: 1.5px solid #ea580c;
+        color: #9a3412;
+        border-radius: 10px;
+        padding: 0.6rem 0.65rem;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 800;
+    }}
+    .legend-green {{
+        background: #f0fdf4;
+        border: 1.5px solid #16a34a;
+        color: #166534;
+        border-radius: 10px;
+        padding: 0.6rem 0.65rem;
+        text-align: center;
+        font-size: 0.85rem;
+        font-weight: 800;
+    }}
+    .stButton > button, .stDownloadButton > button {{
+        width: 100%;
+        border-radius: 10px;
+        min-height: 2.8rem;
+        font-weight: 700;
+        font-family: 'Cairo', sans-serif;
+    }}
+    @media (max-width: 640px) {{
+        .legend-grid {{
+            grid-template-columns: 1fr;
+        }}
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f"""
+    <div class="top-banner" dir="{dir_attr}">
+        <div class="top-badge">{t["badge"]}</div>
+        <div class="top-title">{t["title"]}</div>
+        <div class="top-sub">{t["subtitle"]}</div>
     </div>
-    <div class="legend-grid">
-        <div class="legend-card">🔴 مخالفة / إشكال</div>
-        <div class="legend-card">🟠 تنبيه / مراجعة</div>
-        <div class="legend-card">🟢 متوافق / سليم</div>
+    <div class="legend-grid" dir="{dir_attr}">
+        <div class="legend-red">{t["red_label"]}</div>
+        <div class="legend-orange">{t["orange_label"]}</div>
+        <div class="legend-green">{t["green_label"]}</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 meta_summary = (
-    f"المسار: {track}"
+    f"{t['track_label']}: {track}"
     + (f" ({b2b_category})" if track == "B2B" and b2b_category else "")
-    + f" | اللغة: {language} | الاختصاص: {specialty} | المرجع: {law_reference}"
+    + f" | {t['lang_label']}: {language} | {t['specialty_label']}: {specialty} | {t['law_label']}: {law_reference}"
 )
 st.caption(meta_summary)
 
 extra_context = st.text_input(
-    "سياق إضافي (اختياري)",
-    placeholder="مثال: دفتر شروط بناء أو تجهيز أو توريد، عقد مقاولة، شركة مساهمة بسيطة...",
+    t["context_label"],
+    placeholder=t["context_ph"],
 )
 
 input_text = st.text_area(
-    "النص القانوني أو البند المراد تدقيقه",
+    t["text_label"],
     height=155,
-    placeholder="اكتبي أو الصقي النص القانوني هنا...",
+    placeholder=t["text_ph"],
 )
 
 uploaded_docs = st.file_uploader(
-    "إرفاق ملف أو وثيقة (اختياري — غير إجباري للمتعامل)",
+    t["upload_label"],
     type=["pdf", "docx", "png", "jpg", "jpeg", "webp", "txt", "md", "csv", "json"],
     accept_multiple_files=True,
 )
 
 if "final_report" not in st.session_state:
     st.session_state.final_report = ""
+if "final_report_lang" not in st.session_state:
+    st.session_state.final_report_lang = "العربية"
 
-if st.button("🚀 تشغيل التدقيق القانوني", type="primary"):
+if st.button(t["run_btn"], type="primary"):
     if not api_key:
-        st.error("يرجى ضبط GROQ_API_KEY في Streamlit Secrets أو إدخاله في الإعدادات.")
+        st.error(t["missing_key"])
     elif not HAS_GROQ:
-        st.error("مكتبة groq غير مثبّتة.")
+        st.error(t["missing_groq"])
     else:
-        with st.spinner("جاري التدقيق القانوني..."):
+        with st.spinner(t["spinner"]):
             extracted_docs = read_uploaded_files(uploaded_docs, api_key, vision_models)
             parts = []
             if extra_context.strip():
-                parts.append(f"السياق: {extra_context.strip()}")
+                parts.append(f"Contexte / السياق: {extra_context.strip()}")
             if input_text.strip():
-                parts.append(f"النص المدخل:\n{input_text.strip()}")
+                parts.append(f"Texte / النص المدخل:\n{input_text.strip()}")
             if extracted_docs.strip():
-                parts.append(f"محتوى الملفات المرفوعة:\n{extracted_docs.strip()}")
+                parts.append(f"Documents / محتوى الملفات المرفوعة:\n{extracted_docs.strip()}")
 
             combined_input = "\n\n".join(parts).strip()
             if not combined_input:
-                st.warning("أدخلي نصاً قانونياً أو أرفقي ملفاً اختيارياً واحداً على الأقل.")
+                st.warning(t["empty_input"])
             else:
                 try:
                     sys_prompt = build_prompt_system(language, track, b2b_category, specialty, law_reference)
-                    usr_prompt = f"المادة المطلوب تدقيقها:\n{combined_input[:28000]}"
+                    usr_prompt = f"Matière à auditer / المادة المطلوب تدقيقها:\n{combined_input[:28000]}"
                     st.session_state.final_report = run_audit_engine(
                         api_key, sys_prompt, usr_prompt, text_models
                     )
+                    st.session_state.final_report_lang = language
                 except Exception as exc:
-                    st.error(f"تعذر إتمام التدقيق: {exc}")
+                    st.error(f"{exc}")
 
 if st.session_state.final_report:
     st.markdown("---")
-    st.markdown("### 📄 تقرير التدقيق")
-    st.markdown(st.session_state.final_report)
+    st.markdown(f"### {t['report_heading']}")
+    render_colored_paragraphs(st.session_state.final_report, st.session_state.final_report_lang)
 
-    st.markdown("### ⬇️ تحميل التقرير")
+    st.markdown(f"### {t['download_heading']}")
     rep_content = st.session_state.final_report
     col_left, col_right = st.columns(2)
     with col_left:
         st.download_button(
-            "تحميل Word (.docx)",
+            t["dl_docx"],
             data=build_docx(rep_content, meta_summary),
             file_name="rapport_raseen_ai.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -515,27 +753,27 @@ if st.session_state.final_report:
         pdf_data = build_pdf(rep_content, meta_summary)
         if pdf_data:
             st.download_button(
-                "تحميل PDF (.pdf)",
+                t["dl_pdf"],
                 data=pdf_data,
                 file_name="rapport_raseen_ai.pdf",
                 mime="application/pdf",
             )
         else:
             st.download_button(
-                "تحميل نص التقرير (.txt)",
+                t["dl_txt"],
                 data=rep_content.encode("utf-8"),
                 file_name="rapport_raseen_ai.txt",
                 mime="text/plain; charset=utf-8",
             )
     with col_right:
         st.download_button(
-            "تحميل نص (.txt)",
+            t["dl_txt"],
             data=rep_content.encode("utf-8"),
             file_name="rapport_raseen_ai.txt",
             mime="text/plain; charset=utf-8",
         )
         st.download_button(
-            "تحميل حزمة كاملة (.zip)",
+            t["dl_zip"],
             data=build_zip(rep_content, meta_summary, uploaded_docs),
             file_name="raseen_ai_package.zip",
             mime="application/zip",
