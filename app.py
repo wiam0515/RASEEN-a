@@ -238,7 +238,7 @@ def run_gemini_audit(
         )
 
     response = client.models.generate_content(
-        model="gemini-4-Hydrogen",
+        model="gemini-4-hydrogen",
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
