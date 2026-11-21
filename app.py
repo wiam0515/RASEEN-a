@@ -1,4 +1,5 @@
-﻿import io
+import base64
+import io
 import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
@@ -12,11 +13,17 @@ st.set_page_config(
 MAX_TENDER_CHARS = 22000
 MAX_CONTRACTOR_CHARS = 16000
 
-CANDIDATE_GROQ_MODELS = [
+CANDIDATE_TEXT_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
     "gemma2-9b-it",
     "mixtral-8x7b-32768",
+]
+
+CANDIDATE_VISION_MODELS = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "llama-3.2-90b-vision-preview",
+    "llama-3.2-11b-vision-preview",
 ]
 
 B2B_TARGET_USERS = [
@@ -150,21 +157,27 @@ def get_groq_client() -> Groq:
     return Groq(api_key=api_key)
 
 
-def get_available_models_order(client: Groq) -> list[str]:
+def get_available_models_order(client: Groq, candidates: list[str], vision_only: bool = False) -> list[str]:
     ordered = []
     try:
         models_resp = client.models.list()
         available_ids = [m.id for m in getattr(models_resp, "data", []) if getattr(m, "id", None)]
-        for preferred in CANDIDATE_GROQ_MODELS:
+        for preferred in candidates:
             if preferred in available_ids and preferred not in ordered:
                 ordered.append(preferred)
         for mid in available_ids:
-            if mid not in ordered and ("llama" in mid or "gemma" in mid or "mixtral" in mid or "qwen" in mid or "deepseek" in mid):
-                ordered.append(mid)
+            if mid in ordered:
+                continue
+            if vision_only:
+                if "vision" in mid or "scout" in mid or "maverick" in mid:
+                    ordered.append(mid)
+            else:
+                if any(k in mid for k in ("llama", "gemma", "mixtral", "qwen", "deepseek")):
+                    ordered.append(mid)
     except Exception:
         pass
 
-    for fallback in CANDIDATE_GROQ_MODELS:
+    for fallback in candidates:
         if fallback not in ordered:
             ordered.append(fallback)
     return ordered
@@ -176,46 +189,70 @@ def _trim_text(text: str, max_chars: int) -> str:
     return text[:max_chars].strip() + "\n\n[... تم الاقتطاع حفاظاً على حد طول النص المرسل للنموذج ...]"
 
 
-def extract_pdf_text_with_ocr_fallback(uploaded_file) -> tuple[str, int, str]:
-    raw_bytes = uploaded_file.getvalue()
+def extract_pdf_text(raw_bytes: bytes) -> tuple[str, int]:
     reader = PdfReader(io.BytesIO(raw_bytes))
     total_pages = len(reader.pages)
-    extracted_pages = []
-    missing_pages = []
-
+    pages = []
     for idx, page in enumerate(reader.pages, start=1):
         txt = (page.extract_text() or "").strip()
         if txt:
-            extracted_pages.append(f"[صفحة {idx}]\n{txt}")
-        else:
-            missing_pages.append(idx)
+            pages.append(f"[صفحة {idx}]\n{txt}")
+    return "\n\n".join(pages), total_pages
 
-    if extracted_pages and not missing_pages:
-        return "\n\n".join(extracted_pages), total_pages, "نص مباشر من PDF"
 
+def extract_images_from_pdf(raw_bytes: bytes, max_images: int = 4) -> list[tuple[str, str]]:
+    images_out = []
     try:
-        from pdf2image import convert_from_bytes
-        import pytesseract
-
-        images = convert_from_bytes(raw_bytes)
-        combined_pages = []
-        for idx, page in enumerate(reader.pages, start=1):
-            direct_txt = (page.extract_text() or "").strip()
-            if direct_txt:
-                combined_pages.append(f"[صفحة {idx}]\n{direct_txt}")
-            elif idx - 1 < len(images):
-                ocr_txt = (pytesseract.image_to_string(images[idx - 1], lang="ara+fra") or "").strip()
-                if ocr_txt:
-                    combined_pages.append(f"[صفحة {idx} - OCR]\n{ocr_txt}")
-        if combined_pages:
-            return "\n\n".join(combined_pages), total_pages, "نص مباشر + استخراج بصري (OCR)"
+        reader = PdfReader(io.BytesIO(raw_bytes))
+        for p_idx, page in enumerate(reader.pages, start=1):
+            for img_idx, img_file in enumerate(getattr(page, "images", []), start=1):
+                data = getattr(img_file, "data", None)
+                if data:
+                    b64 = base64.b64encode(data).decode("utf-8")
+                    images_out.append((f"image/jpeg", b64))
+                    if len(images_out) >= max_images:
+                        return images_out
     except Exception:
         pass
+    return images_out
 
-    if extracted_pages:
-        return "\n\n".join(extracted_pages), total_pages, "نص جزئي من PDF"
 
-    return "", total_pages, "غير مستخرج"
+def prepare_tender_payload(uploaded_file) -> dict:
+    raw_bytes = uploaded_file.getvalue()
+    name_lower = uploaded_file.name.lower()
+
+    if name_lower.endswith(".pdf"):
+        text, total_pages = extract_pdf_text(raw_bytes)
+        if text:
+            return {
+                "kind": "text",
+                "label": f"{uploaded_file.name} ({total_pages} صفحات - نص مباشر)",
+                "text": text,
+                "images": [],
+            }
+        embedded_imgs = extract_images_from_pdf(raw_bytes, max_images=4)
+        if embedded_imgs:
+            return {
+                "kind": "images",
+                "label": f"{uploaded_file.name} ({total_pages} صفحات - صور مدمجة)",
+                "text": "",
+                "images": embedded_imgs,
+            }
+        return {
+            "kind": "empty",
+            "label": f"{uploaded_file.name} ({total_pages} صفحات)",
+            "text": "",
+            "images": [],
+        }
+
+    mime_type = "image/png" if name_lower.endswith(".png") else "image/jpeg"
+    b64 = base64.b64encode(raw_bytes).decode("utf-8")
+    return {
+        "kind": "images",
+        "label": f"{uploaded_file.name} (صورة وثيقة)",
+        "text": "",
+        "images": [(mime_type, b64)],
+    }
 
 
 def extract_contractor_files_text(contractor_files) -> str:
@@ -226,26 +263,17 @@ def extract_contractor_files_text(contractor_files) -> str:
     for f in contractor_files:
         name_lower = f.name.lower()
         if name_lower.endswith(".pdf"):
-            txt, pages, method = extract_pdf_text_with_ocr_fallback(f)
+            txt, pages = extract_pdf_text(f.getvalue())
             if txt:
-                parts.append(f"=== وثيقة ملف المتعهد: {f.name} ({pages} صفحات - {method}) ===\n{txt}")
+                parts.append(f"=== وثيقة ملف المتعهد: {f.name} ({pages} صفحات) ===\n{txt}")
             else:
                 parts.append(
-                    f"=== وثيقة ملف المتعهد: {f.name} ({pages} صفحات) ===\n[ملف مرفق بدون نص رقمي مباشر؛ يجب التحقق من الوثائق والتواقيع والأختام المرفقة فيه]"
+                    f"=== وثيقة ملف المتعهد: {f.name} ({pages} صفحات) ===\n[ملف PDF مرفق ضمن ملف المتعهد بدون نص رقمي مباشر؛ يجب التحقق من الوثائق والتواقيع والأختام المرفقة فيه]"
                 )
         else:
-            try:
-                from PIL import Image
-                import pytesseract
-
-                img = Image.open(io.BytesIO(f.getvalue()))
-                ocr_txt = (pytesseract.image_to_string(img, lang="ara+fra") or "").strip()
-                if ocr_txt:
-                    parts.append(f"=== صورة وثيقة المتعهد: {f.name} ===\n{ocr_txt}")
-                else:
-                    parts.append(f"=== صورة وثيقة المتعهد: {f.name} ===\n[صورة وثيقة/توقيع/ختم مرفقة]")
-            except Exception:
-                parts.append(f"=== مرفق المتعهد: {f.name} ===\n[مرفق وثائق/تواقيع]")
+            parts.append(
+                f"=== مرفق صورة وثيقة/توقيع المتعهد: {f.name} ===\n[صورة مرفقة ضمن ملف المتعهد]"
+            )
 
     return _trim_text("\n\n".join(parts), MAX_CONTRACTOR_CHARS)
 
@@ -295,23 +323,21 @@ def build_system_prompt(language: str, circuit: str) -> str:
 """.strip()
 
 
-def run_audit(
-    client: Groq,
+def build_text_prompt(
     language: str,
     circuit: str,
     sector: str,
     b2b_profile: str,
-    tender_name: str,
+    tender_label: str,
     tender_text: str,
     contractor_summary: str,
-) -> tuple[str, str]:
+) -> str:
     safe_tender_text = _trim_text(tender_text, MAX_TENDER_CHARS)
-
     user_content = f"""
 اللغة المطلوبة: {language}
 المسار: {circuit}
 القطاع: {sector}
-ملف دفتر الشروط / العقد / المناقصة: {tender_name}
+ملف دفتر الشروط / العقد / المناقصة: {tender_label}
 
 محتوى دفتر الشروط / العقد / المناقصة:
 \"\"\"
@@ -330,28 +356,90 @@ def run_audit(
 {contractor_summary if contractor_summary else "لم يتم رفع أو استخراج نصوص من ملفات المتعهد بعد؛ قارن متطلبات دفتر الشروط بالوثائق الأساسية (السجل التجاري، الضرائب، شبه الضمان الاجتماعي، القانون الأساسي، التأهيل، المراجع، والتواقيع والأختام) ونبّه إلى النواقص المحتملة مع تطبيق الإشارات الضوئية والقانون الصحيح الواجب تطبيقه."}
 \"\"\"
 """
+    return user_content
 
-    models_to_try = get_available_models_order(client)
+
+def run_audit(
+    client: Groq,
+    language: str,
+    circuit: str,
+    sector: str,
+    b2b_profile: str,
+    payload: dict,
+    contractor_summary: str,
+) -> tuple[str, str]:
+    sys_prompt = build_system_prompt(language, circuit)
+
+    if payload["kind"] == "text":
+        user_content = build_text_prompt(
+            language=language,
+            circuit=circuit,
+            sector=sector,
+            b2b_profile=b2b_profile,
+            tender_label=payload["label"],
+            tender_text=payload["text"],
+            contractor_summary=contractor_summary,
+        )
+        models_to_try = get_available_models_order(client, CANDIDATE_TEXT_MODELS, vision_only=False)
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                completion = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.2,
+                )
+                content = (completion.choices[0].message.content or "").strip()
+                if content:
+                    return content, model_name
+            except Exception as exc:
+                last_error = exc
+                continue
+        raise RuntimeError(f"تعذر تشغيل التدقيق النصي على Groq. آخر خطأ: {last_error}")
+
+    vision_instruction = build_text_prompt(
+        language=language,
+        circuit=circuit,
+        sector=sector,
+        b2b_profile=b2b_profile,
+        tender_label=payload["label"],
+        tender_text="[اقرأ النص الموجود في الصورة/الصور المرفقة لدفتر الشروط أو العقد أو المناقصة بدقة ثم قم بتدقيقه قانونياً]",
+        contractor_summary=contractor_summary,
+    )
+    content_blocks = [{"type": "text", "text": vision_instruction}]
+    for mime_type, b64_str in payload["images"]:
+        content_blocks.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime_type};base64,{b64_str}"},
+            }
+        )
+
+    vision_models = get_available_models_order(client, CANDIDATE_VISION_MODELS, vision_only=True)
     last_error = None
-
-    for model_name in models_to_try:
+    for v_model in vision_models:
         try:
             completion = client.chat.completions.create(
-                model=model_name,
+                model=v_model,
                 messages=[
-                    {"role": "system", "content": build_system_prompt(language, circuit)},
-                    {"role": "user", "content": user_content},
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": content_blocks},
                 ],
                 temperature=0.2,
             )
             content = (completion.choices[0].message.content or "").strip()
             if content:
-                return content, model_name
+                return content, v_model
         except Exception as exc:
             last_error = exc
             continue
 
-    raise RuntimeError(f"تعذر تشغيل التدقيق على أي نموذج متاح في Groq. آخر خطأ: {last_error}")
+    raise RuntimeError(
+        f"لم يتمكن نموذج الرؤية في Groq من قراءة الصورة المرفوعة ({last_error}). يُفضّل رفع ملف PDF يحتوي على نص قابل للنسخ."
+    )
 
 
 st.markdown(CUSTOM_STYLES, unsafe_allow_html=True)
@@ -393,8 +481,12 @@ with st.sidebar:
         ],
     )
 
-st.subheader("تحميل دفتر الشروط / العقد / المناقصة (PDF)")
-tender_pdf = st.file_uploader("اختر ملف دفتر الشروط أو العقد أو المناقصة (PDF)", type=["pdf"], key="tender_pdf")
+st.subheader("تحميل دفتر الشروط / العقد / المناقصة (PDF أو صورة)")
+tender_file = st.file_uploader(
+    "اختر ملف دفتر الشروط أو العقد أو المناقصة (PDF أو JPG / PNG)",
+    type=["pdf", "png", "jpg", "jpeg"],
+    key="tender_file",
+)
 
 b2b_profile = B2B_TARGET_USERS[0]
 contractor_files = []
@@ -437,19 +529,19 @@ if circuit.startswith("B2B"):
     )
 
 if st.button("تشغيل التدقيق القانوني", type="primary", use_container_width=True):
-    if tender_pdf is None:
-        st.warning("يرجى تحميل ملف دفتر الشروط أو العقد أو المناقصة (PDF) أولاً.")
+    if tender_file is None:
+        st.warning("يرجى تحميل ملف دفتر الشروط أو العقد أو المناقصة أولاً.")
         st.stop()
 
     try:
-        tender_text, tender_pages, tender_method = extract_pdf_text_with_ocr_fallback(tender_pdf)
+        payload = prepare_tender_payload(tender_file)
     except Exception as exc:
-        st.error(f"تعذر قراءة ملف PDF: {exc}")
+        st.error(f"تعذر قراءة الملف المرفوع: {exc}")
         st.stop()
 
-    if not tender_text:
+    if payload["kind"] == "empty":
         st.error(
-            f"تم رفع الملف ({tender_pdf.name} - {tender_pages} صفحات)، لكن لم يتم استخراج نص منه. تأكد من أن الملف يحتوي على نص قابل للنسخ أو أضف مكتبتي pdf2image وpytesseract لقراءة الصفحات المصورة."
+            f"تم رفع الملف ({payload['label']})، لكنه لا يحتوي على نص رقمي مباشر ولا على صور مدمجة قابلة للقراءة. يُرجى رفع صورة واضحة (`JPG` / `PNG`) أو ملف `PDF` يحتوي على نص قابل للنسخ."
         )
         st.stop()
 
@@ -477,11 +569,10 @@ if st.button("تشغيل التدقيق القانوني", type="primary", use_c
                 circuit=circuit,
                 sector=sector,
                 b2b_profile=b2b_profile,
-                tender_name=f"{tender_pdf.name} ({tender_pages} صفحات - {tender_method})",
-                tender_text=tender_text,
+                payload=payload,
                 contractor_summary=contractor_text,
             )
-            st.caption(f"النموذج المنفّذ: {used_model}")
+            st.caption(f"النموذج المنفّذ: {used_model} | الملف: {payload['label']}")
             st.markdown("### تقرير المستشار القانوني الذكي — رصين AI")
             st.markdown(report)
             with st.expander("المرجعية القانونية المعتمدة في التدقيق"):
