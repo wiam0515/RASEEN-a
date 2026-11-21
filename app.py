@@ -9,8 +9,34 @@ st.set_page_config(
     layout="wide",
 )
 
-MAX_TENDER_CHARS = 24000
-MAX_CONTRACTOR_CHARS = 18000
+MAX_TENDER_CHARS = 22000
+MAX_CONTRACTOR_CHARS = 16000
+
+CANDIDATE_GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768",
+]
+
+B2B_TARGET_USERS = [
+    "المقاولون والمؤسسات الاقتصادية المشاركة في الصفقات والمناقصات",
+    "المؤسسات الناشئة وحاملو المشاريع المبتكرة في العقود والشراكات",
+    "شركات المساهمة البسيطة والشركات التجارية",
+    "مكاتب الدراسات والاستشارة الهندسية والقانونية",
+    "المتعاملون من الباطن (Sous-traitants) والموردون",
+    "المستشارون القانونيون ومديرو العقود والامتثال داخل المؤسسات",
+]
+
+B2B_KEY_DOCUMENTS = [
+    "السجل التجاري (Extrait du registre de commerce)",
+    "البطاقة الجبائية (NIF)، الرقم الإحصائي (NIS)، وشهادات الأداء والضرائب",
+    "شهادات شبه الضمان الاجتماعي (CNAS / CASNOS / CACOBATPH)",
+    "القانون الأساسي (Statuts) وتفويض التوقيع والتمثيل القانوني",
+    "شهادات التأهيل والتصنيف المهني أو الاعتمادات",
+    "المراجع المهنية والقدرات التقنية والمالية",
+    "التواقيع والأختام والتصريحات الموقعة والمصادق عليها",
+]
 
 LEGAL_REFERENCES_CORPUS = """
 المرجعية القانونية الجزائرية الشاملة المعتمدة في منصة رصين AI (لمساري B2G وB2B):
@@ -40,6 +66,81 @@ LEGAL_REFERENCES_CORPUS = """
    - قواعد تأسيس وتسيير وصلاحيات التمثيل والتوقيع والالتزامات القانونية لشركات المساهمة البسيطة عند تدقيق ملفات المتعاملين الاقتصاديين في B2B.
 """.strip()
 
+CUSTOM_STYLES = """
+<style>
+    .stApp {
+        background: linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%);
+    }
+    .raseen-hero {
+        background: linear-gradient(135deg, #0f2942 0%, #1b4368 100%);
+        color: #ffffff;
+        padding: 20px 24px;
+        border-radius: 14px;
+        border-bottom: 4px solid #d4a32b;
+        box-shadow: 0 6px 18px rgba(15, 41, 66, 0.12);
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+    }
+    .raseen-hero-title {
+        margin: 0;
+        font-size: 1.55rem;
+        font-weight: 700;
+        color: #ffffff;
+        line-height: 1.35;
+    }
+    .raseen-hero-sub {
+        margin: 6px 0 0 0;
+        font-size: 0.98rem;
+        color: #f3d57b;
+        font-weight: 500;
+    }
+    .raseen-card {
+        background-color: #ffffff;
+        border: 1px solid #d9e2ec;
+        border-right: 4px solid #1b4368;
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 8px rgba(15, 41, 66, 0.05);
+    }
+    .raseen-card-gold {
+        border-right-color: #d4a32b;
+    }
+    .raseen-card h4 {
+        margin-top: 0;
+        color: #0f2942;
+        font-size: 1.05rem;
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #0f2942 0%, #1d4e7a 100%);
+        color: #ffffff;
+        border: 1px solid #d4a32b;
+        border-radius: 10px;
+        font-weight: 700;
+        padding: 0.65rem 1.2rem;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #163a5c 0%, #245f94 100%);
+        border-color: #f3d57b;
+    }
+</style>
+""".strip()
+
+RASEEN_LOGO_SVG = """
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="شعار رصين AI">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#173857" stroke="#D4A32B" stroke-width="2.5"/>
+  <path d="M32 13L46 19V30.5C46 39.8 39.9 47.9 32 51C24.1 47.9 18 39.8 18 30.5V19L32 13Z" fill="#0E2438" stroke="#F3D57B" stroke-width="2"/>
+  <path d="M32 20V39" stroke="#F3D57B" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M23 25H41" stroke="#F3D57B" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M23 25L19.5 32H26.5L23 25Z" fill="#D4A32B"/>
+  <path d="M41 25L37.5 32H44.5L41 25Z" fill="#D4A32B"/>
+  <circle cx="46" cy="46" r="8" fill="#D4A32B" stroke="#0E2438" stroke-width="2"/>
+  <path d="M42.8 46.2L45 48.4L49.4 43.8" stroke="#0F2942" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+""".strip()
+
 
 def get_groq_client() -> Groq:
     api_key = st.secrets.get("GROQ_API_KEY")
@@ -49,10 +150,30 @@ def get_groq_client() -> Groq:
     return Groq(api_key=api_key)
 
 
-def _trim_text(text: str, max_chars: int) -> tuple[str, bool]:
+def get_available_models_order(client: Groq) -> list[str]:
+    ordered = []
+    try:
+        models_resp = client.models.list()
+        available_ids = [m.id for m in getattr(models_resp, "data", []) if getattr(m, "id", None)]
+        for preferred in CANDIDATE_GROQ_MODELS:
+            if preferred in available_ids and preferred not in ordered:
+                ordered.append(preferred)
+        for mid in available_ids:
+            if mid not in ordered and ("llama" in mid or "gemma" in mid or "mixtral" in mid or "qwen" in mid or "deepseek" in mid):
+                ordered.append(mid)
+    except Exception:
+        pass
+
+    for fallback in CANDIDATE_GROQ_MODELS:
+        if fallback not in ordered:
+            ordered.append(fallback)
+    return ordered
+
+
+def _trim_text(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
-        return text, False
-    return text[:max_chars].strip() + "\n\n[... تم الاقتطاع حفاظاً على حد طول النص المرسل للنموذج ...]", True
+        return text
+    return text[:max_chars].strip() + "\n\n[... تم الاقتطاع حفاظاً على حد طول النص المرسل للنموذج ...]"
 
 
 def extract_pdf_text_with_ocr_fallback(uploaded_file) -> tuple[str, int, str]:
@@ -126,9 +247,7 @@ def extract_contractor_files_text(contractor_files) -> str:
             except Exception:
                 parts.append(f"=== مرفق المتعهد: {f.name} ===\n[مرفق وثائق/تواقيع]")
 
-    joined = "\n\n".join(parts)
-    trimmed, _ = _trim_text(joined, MAX_CONTRACTOR_CHARS)
-    return trimmed
+    return _trim_text("\n\n".join(parts), MAX_CONTRACTOR_CHARS)
 
 
 def build_system_prompt(language: str, circuit: str) -> str:
@@ -157,7 +276,10 @@ def build_system_prompt(language: str, circuit: str) -> str:
     else:
         circuit_rule = """
 المسار المختار هو B2B (مقارنة دفتر الشروط / العقد بملف المقاول أو المؤسسة الاقتصادية المشاركة):
-قارن بدقة بين متطلبات دفتر الشروط أو العقد وبين ما يملكه المقاول أو المؤسسة الاقتصادية من وثائق وإثباتات وتواقيع، مع تطبيق الإشارات الضوئية (🔴 أحمر: خطأ / 🟠 برتقالي: تنبيه / 🟢 أخضر: صحيح) على عناصر المقارنة (الوثائق المتوفرة والناقصة، التواقيع والمصادقات والأختام المتوفرة والناقصة، وحالات الإلغاء أو الفسخ)، وذكر القانون الصحيح الواجب تطبيقه فوراً عند أي خطأ أو تنبيه أو إلغاء.
+يستفيد من هذا المسار: المقاولون والمؤسسات الاقتصادية، المؤسسات الناشئة وحاملو المشاريع المبتكرة، شركات المساهمة البسيطة والشركات التجارية، مكاتب الدراسات والاستشارة، المتعاملون من الباطن، والمستشارون القانونيون ومديرو العقود.
+قارن بدقة بين متطلبات دفتر الشروط أو العقد وبين ما يملكه المقاول أو المؤسسة الاقتصادية من وثائق وتواقيع، مع التركيز على:
+- السجل التجاري، البطاقة الجبائية والرقم الإحصائي وشهادات الأداء والضرائب، شهادات شبه الضمان الاجتماعي، القانون الأساسي وتفويض التوقيع، شهادات التأهيل والتصنيف أو الاعتماد، المراجع المهنية والقدرات، والتواقيع والأختام والتصريحات.
+وطبّق الإشارات الضوئية (🔴 أحمر: خطأ / 🟠 برتقالي: تنبيه / 🟢 أخضر: صحيح) على كل وثيقة أو توقيع أو بند، مع ذكر القانون الصحيح الواجب تطبيقه فوراً عند أي خطأ أو تنبيه أو حالة إلغاء.
 """.strip()
 
     return f"""
@@ -178,11 +300,12 @@ def run_audit(
     language: str,
     circuit: str,
     sector: str,
+    b2b_profile: str,
     tender_name: str,
     tender_text: str,
     contractor_summary: str,
-) -> str:
-    safe_tender_text, _ = _trim_text(tender_text, MAX_TENDER_CHARS)
+) -> tuple[str, str]:
+    safe_tender_text = _trim_text(tender_text, MAX_TENDER_CHARS)
 
     user_content = f"""
 اللغة المطلوبة: {language}
@@ -199,25 +322,52 @@ def run_audit(
     if circuit.startswith("B2B"):
         user_content += f"""
 
+الفئة المستفيدة في مسار B2B: {b2b_profile}
+الوثائق الأساسية الواجب مطابقتها مع دفتر الشروط: {", ".join(B2B_KEY_DOCUMENTS)}
+
 ملف المقاول / المؤسسة الاقتصادية المشاركة في الصفقة أو المناقصة (الوثائق والتواقيع المرفقة):
 \"\"\"
-{contractor_summary if contractor_summary else "لم يتم رفع أو استخراج نصوص من ملفات المتعهد بعد؛ قارن متطلبات دفتر الشروط بالوثائق والتواقيع والصلاحيات القانونية المطلوبة من المقاول أو المؤسسة الاقتصادية ونبّه إلى النواقص المحتملة مع تطبيق الإشارات الضوئية والقانون الصحيح الواجب تطبيقه."}
+{contractor_summary if contractor_summary else "لم يتم رفع أو استخراج نصوص من ملفات المتعهد بعد؛ قارن متطلبات دفتر الشروط بالوثائق الأساسية (السجل التجاري، الضرائب، شبه الضمان الاجتماعي، القانون الأساسي، التأهيل، المراجع، والتواقيع والأختام) ونبّه إلى النواقص المحتملة مع تطبيق الإشارات الضوئية والقانون الصحيح الواجب تطبيقه."}
 \"\"\"
 """
 
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": build_system_prompt(language, circuit)},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.2,
-    )
-    return (completion.choices[0].message.content or "").strip()
+    models_to_try = get_available_models_order(client)
+    last_error = None
+
+    for model_name in models_to_try:
+        try:
+            completion = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": build_system_prompt(language, circuit)},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.2,
+            )
+            content = (completion.choices[0].message.content or "").strip()
+            if content:
+                return content, model_name
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    raise RuntimeError(f"تعذر تشغيل التدقيق على أي نموذج متاح في Groq. آخر خطأ: {last_error}")
 
 
-st.title("منصة التدقيق القانوني الذكي — المستشار القانوني الذكي رصين AI")
-st.caption("خاص بتدقيق العقود والصفقات العمومية والمناقصات")
+st.markdown(CUSTOM_STYLES, unsafe_allow_html=True)
+
+st.markdown(
+    f"""
+    <div class="raseen-hero">
+        <div>{RASEEN_LOGO_SVG}</div>
+        <div>
+            <h1 class="raseen-hero-title">منصة التدقيق القانوني الذكي — المستشار القانوني الذكي رصين AI</h1>
+            <p class="raseen-hero-sub">خاص بتدقيق العقود والصفقات العمومية والمناقصات</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.subheader("اختيار اللغة")
@@ -246,12 +396,41 @@ with st.sidebar:
 st.subheader("تحميل دفتر الشروط / العقد / المناقصة (PDF)")
 tender_pdf = st.file_uploader("اختر ملف دفتر الشروط أو العقد أو المناقصة (PDF)", type=["pdf"], key="tender_pdf")
 
+b2b_profile = B2B_TARGET_USERS[0]
 contractor_files = []
+
 if circuit.startswith("B2B"):
     st.divider()
+    st.markdown("### الفئات المستفيدة والوثائق المطلوب مطابقتها مع دفتر الشروط (B2B)")
+    b2b_profile = st.selectbox("اختر الفئة المستفيدة في مسار B2B", options=B2B_TARGET_USERS)
+
+    info_col1, info_col2 = st.columns(2)
+    with info_col1:
+        users_html = "".join(f"<li>{item}</li>" for item in B2B_TARGET_USERS)
+        st.markdown(
+            f"""
+            <div class="raseen-card">
+                <h4>من يحتاج هذا التطبيق في مسار B2B؟</h4>
+                <ul>{users_html}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with info_col2:
+        docs_html = "".join(f"<li>{doc}</li>" for doc in B2B_KEY_DOCUMENTS)
+        st.markdown(
+            f"""
+            <div class="raseen-card raseen-card-gold">
+                <h4>الوثائق المهمة لمطابقتها مع دفتر الشروط</h4>
+                <ul>{docs_html}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     st.subheader("تحميل ملف المقاول أو المؤسسة الاقتصادية المشاركة في الصفقة أو المناقصة")
     contractor_files = st.file_uploader(
-        "ارفع وثائق وتواقيع المقاول أو المؤسسة الاقتصادية (PDF أو صور)",
+        "ارفع وثائق وتواقيع المقاول أو المؤسسة الاقتصادية (السجل التجاري، الشهادات، القانون الأساسي، التواقيع — PDF أو صور)",
         type=["pdf", "png", "jpg", "jpeg"],
         accept_multiple_files=True,
         key="contractor_files",
@@ -292,16 +471,20 @@ if st.button("تشغيل التدقيق القانوني", type="primary", use_c
     with st.spinner("جاري إجراء التدقيق القانوني عبر الذكاء الاصطناعي..."):
         try:
             groq_client = get_groq_client()
-            report = run_audit(
+            report, used_model = run_audit(
                 client=groq_client,
                 language=selected_language,
                 circuit=circuit,
                 sector=sector,
+                b2b_profile=b2b_profile,
                 tender_name=f"{tender_pdf.name} ({tender_pages} صفحات - {tender_method})",
                 tender_text=tender_text,
                 contractor_summary=contractor_text,
             )
+            st.caption(f"النموذج المنفّذ: {used_model}")
             st.markdown("### تقرير المستشار القانوني الذكي — رصين AI")
             st.markdown(report)
+            with st.expander("المرجعية القانونية المعتمدة في التدقيق"):
+                st.text(LEGAL_REFERENCES_CORPUS)
         except Exception as exc:
             st.error(f"حدث خطأ أثناء تنفيذ التدقيق: {exc}") 
