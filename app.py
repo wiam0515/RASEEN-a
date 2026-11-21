@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 import zipfile
@@ -20,91 +21,118 @@ except ImportError:
     HAS_OCR = False
 
 # ==========================================
-# 1. إعدادات الصفحة والنماذج النشطة في Groq
+# 1. إعدادات الصفحة والهوية البصرية لرصين AI
 # ==========================================
 st.set_page_config(
-    page_title="رصين AI — التدقيق والامتثال القانوني",
+    page_title="رصين AI — التدقيق القانوني",
     page_icon="⚖️",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed",
 )
 
-TEXT_MODELS = [
+FALLBACK_MODELS = [
     "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
 ]
 
-VISION_MODELS = [
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "llama-3.2-11b-vision-preview",
-]
+SYSTEM_PROMPT = """أنت المستشار القانوني الذكي لمنصة "رصين AI" للامتثال والتدقيق القانوني في الجزائر (B2G / B2B).
+حلّل النص أو الملف المرفق بدقة قانونية عالية، واكتب التقرير منظماً ومباشراً:
+1. نظرة عامة موجزة على الوثيقة أو البند.
+2. بنود التدقيق بالإشارات اللونية:
+   - 🔴 خطأ / مخالفة قانونية: مع ذكر النص القانوني الجزائري المناسب.
+   - 🟠 تنبيه / تحفظ يحتاج مراجعة: مع توضيح الإجراء أو المرجع القانوني.
+   - 🟢 متوافق / سليم: البنود المطابقة للأحكام القانونية.
+3. ملخص رقمي سريع لعدد النقاط (أحمر / برتقالي / أخضر).
+4. توصيات عملية مختصرة للتصحيح.
 
-SYSTEM_PROMPT = """أنت مساعد التدقيق القانوني والامتثال لمنصة "رصين AI" في الجزائر (مساري B2G وB2B).
-مهمتك تحليل النصوص والوثائق والملفات المرفوعة بدقة قانونية ومنهجية، وتقديم تقرير واضح ومنظم يتضمن:
-1. ملخص تنفيذي للحالة والمخاطر القانونية.
-2. الإشارات الضوئية للتدقيق القانوني:
-   - 🔴 أحمر (خطأ / مخالفة جوهرية): توضيح المخالفة والنص القانوني الجزائري الواجب تطبيقه.
-   - 🟠 برتقالي (تنبيه / نقطة تحتاج مراجعة أو توضيح): توضيح التحفظ والمرجع القانوني المناسب.
-   - 🟢 أخضر (صحيح / متوافق): تأكيد البنود السليمة.
-3. عدادات وملخص كمي للنقاط المرصودة (عدد المخالفات الحمراء، التنبيهات البرتقالية، النقاط السليمة الخضراء).
-4. توصيات عملية فورية للتصحيح والصياغة القانونية.
-
-اعتمد المرجعية القانونية الجزائرية ذات الصلة حسب طبيعة الملف أو النص (مثل قانون الصفقات العمومية 23-12، قانون مكافحة الفساد 06-01، حماية المعطيات ذات الطابع الشخصي 18-07، التوقيع والتصديق الإلكتروني 15-04، القانون التجاري / شركة المساهمة البسيطة 22-09، وغيرها من النصوص السارية).
-أجب بلغة واضحة ودقيقة وبنفس لغة النص المدقق (العربية أو الفرنسية)."""
+التزم بالمرجعية القانونية الجزائرية ذات الصلة (الصفقات العمومية 23-12، مكافحة الفساد 06-01، حماية المعطيات ذات الطابع الشخصي 18-07، التوقيع والتصديق الإلكتروني 15-04، القانون التجاري / شركة المساهمة البسيطة 22-09، وغيرها)، واكتب بنفس لغة المادة المدققة (العربية أو الفرنسية)."""
 
 # ==========================================
-# 2. تنسيق CSS للهاتف والشاشات المختلفة
+# 2. تصميم أنيق وعصري متجاوب مع الهاتف
 # ==========================================
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Cairo', sans-serif;
+    }
     .main .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2.5rem;
-        max-width: 1100px;
+        max-width: 780px;
+        padding-top: 1.3rem;
+        padding-bottom: 3rem;
     }
-    .raseen-header {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff;
-        padding: 1.1rem 1.25rem;
-        border-radius: 14px;
-        border-right: 6px solid #f59e0b;
-        margin-bottom: 1rem;
+    .hero-card {
+        background: #111827;
+        color: #f9fafb;
+        padding: 1.35rem 1.4rem;
+        border-radius: 18px;
+        border: 1px solid #1f2937;
+        box-shadow: 0 10px 25px rgba(17, 24, 39, 0.08);
+        margin-bottom: 1.1rem;
     }
-    .raseen-header h1 {
-        margin: 0;
-        font-size: 1.45rem;
-        color: #ffffff;
-    }
-    .raseen-header p {
-        margin: 0.35rem 0 0 0;
-        font-size: 0.92rem;
-        color: #cbd5e1;
-    }
-    .signal-box {
-        padding: 0.7rem 0.95rem;
-        border-radius: 10px;
+    .hero-badge {
+        display: inline-block;
+        background: rgba(245, 158, 11, 0.16);
+        color: #fbbf24;
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 0.22rem 0.65rem;
+        border-radius: 999px;
         margin-bottom: 0.55rem;
-        font-weight: 600;
-        font-size: 0.95rem;
     }
-    .signal-red {
-        background-color: rgba(220, 38, 38, 0.14);
-        border-right: 5px solid #dc2626;
+    .hero-title {
+        font-size: 1.5rem;
+        font-weight: 800;
+        margin: 0 0 0.35rem 0;
+        line-height: 1.35;
     }
-    .signal-orange {
-        background-color: rgba(217, 119, 6, 0.16);
-        border-right: 5px solid #d97706;
+    .hero-sub {
+        font-size: 0.92rem;
+        color: #d1d5db;
+        margin: 0;
+        line-height: 1.55;
     }
-    .signal-green {
-        background-color: rgba(22, 163, 74, 0.15);
-        border-right: 5px solid #16a34a;
+    .legend-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.6rem;
+        margin-bottom: 1.15rem;
+    }
+    .legend-pill {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 0.65rem 0.75rem;
+        text-align: center;
+        font-size: 0.84rem;
+        font-weight: 700;
+        color: #111827;
+    }
+    .section-box {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 1.1rem 1.15rem;
+        margin-bottom: 1rem;
     }
     .stButton > button, .stDownloadButton > button {
         width: 100%;
-        border-radius: 10px;
-        min-height: 2.8rem;
-        font-weight: 600;
+        border-radius: 12px;
+        min-height: 2.95rem;
+        font-weight: 700;
+        font-family: 'Cairo', sans-serif;
+    }
+    @media (max-width: 640px) {
+        .legend-strip {
+            grid-template-columns: 1fr;
+        }
+        .hero-title {
+            font-size: 1.28rem;
+        }
     }
     </style>
     """,
@@ -112,7 +140,7 @@ st.markdown(
 )
 
 # ==========================================
-# 3. الحصول على مفتاح Groq واستدعاء النماذج
+# 3. مفتاح Groq وجلب النماذج النشطة تلقائياً
 # ==========================================
 def get_groq_api_key() -> str:
     try:
@@ -126,12 +154,50 @@ def get_groq_api_key() -> str:
     return st.session_state.get("manual_groq_key", "").strip()
 
 
-def run_groq_text_audit(api_key: str, prompt: str, preferred_model: str) -> tuple[str, str]:
-    client = Groq(api_key=api_key)
-    models_to_try = [preferred_model] + [m for m in TEXT_MODELS if m != preferred_model]
-    last_err = None
+def fetch_available_groq_models(api_key: str) -> tuple[list[str], list[str]]:
+    text_candidates = []
+    vision_candidates = []
 
-    for model_name in models_to_try:
+    if api_key and HAS_GROQ:
+        try:
+            client = Groq(api_key=api_key)
+            models_resp = client.models.list()
+            for m in getattr(models_resp, "data", []) or []:
+                mid = getattr(m, "id", "") or ""
+                if not mid:
+                    continue
+                low = mid.lower()
+                if any(skip in low for skip in ["whisper", "tts", "guard", "embed", "audio"]):
+                    continue
+                if any(v in low for v in ["vision", "scout", "maverick", "vl"]):
+                    vision_candidates.append(mid)
+                else:
+                    text_candidates.append(mid)
+        except Exception:
+            pass
+
+    for fb in FALLBACK_MODELS:
+        if fb not in text_candidates:
+            text_candidates.append(fb)
+
+    for vfb in ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-11b-vision-preview"]:
+        if vfb not in vision_candidates:
+            vision_candidates.append(vfb)
+
+    return text_candidates, vision_candidates
+
+
+def run_groq_audit(api_key: str, prompt: str, preferred_model: str, candidate_models: list[str]) -> tuple[str, str]:
+    client = Groq(api_key=api_key)
+    ordered = []
+    if preferred_model:
+        ordered.append(preferred_model)
+    for m in candidate_models:
+        if m not in ordered:
+            ordered.append(m)
+
+    errors = []
+    for model_name in ordered:
         try:
             resp = client.chat.completions.create(
                 model=model_name,
@@ -142,384 +208,325 @@ def run_groq_text_audit(api_key: str, prompt: str, preferred_model: str) -> tupl
                 temperature=0.2,
                 max_tokens=3000,
             )
-            content = (resp.choices[0].message.content or "").strip()
-            if content:
-                return content, model_name
-        except Exception as e:
-            last_err = e
-            continue
-
-    raise RuntimeError(f"تعذر إكمال التدقيق النصي عبر Groq: {last_err}")
-
-
-def describe_image_with_groq(api_key: str, pil_img: Image.Image, filename: str) -> str:
-    img_buf = io.BytesIO()
-    rgb_img = pil_img.convert("RGB")
-    rgb_img.save(img_buf, format="JPEG", quality=85)
-    import base64
-    b64_img = base64.b64encode(img_buf.getvalue()).decode("utf-8")
-
-    client = Groq(api_key=api_key)
-    last_err = None
-    for v_model in VISION_MODELS:
-        try:
-            resp = client.chat.completions.create(
-                model=v_model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": (
-                                    f"استخرج بدقة كل النصوص والبنود والأرقام والتواريخ والملاحظات الظاهرة في هذه الصورة ({filename}) "
-                                    "واحفظ لغتها الأصلية دون تلخيص مخل."
-                                ),
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{b64_img}",
-                                },
-                            },
-                        ],
-                    }
-                ],
-                temperature=0.1,
-                max_tokens=1800,
-            )
             txt = (resp.choices[0].message.content or "").strip()
             if txt:
-                return txt
+                return txt, model_name
         except Exception as e:
-            last_err = e
+            errors.append(f"{model_name}: {e}")
             continue
+
+    raise RuntimeError("لم ينجح أي نموذج نشط على Groq. التفاصيل: " + " | ".join(errors[-2:]))
+
+
+def extract_image_text(api_key: str, pil_img: Image.Image, filename: str, vision_models: list[str]) -> str:
+    rgb_img = pil_img.convert("RGB")
+    buf = io.BytesIO()
+    rgb_img.save(buf, format="JPEG", quality=85)
+    b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    if api_key and HAS_GROQ:
+        client = Groq(api_key=api_key)
+        for vm in vision_models:
+            try:
+                resp = client.chat.completions.create(
+                    model=vm,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        f"استخرج بدقة كل النصوص والبنود والأرقام والتواريخ من هذه الصورة ({filename}) "
+                                        "بنفس لغتها الأصلية دون حذف أو تلخيص."
+                                    ),
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
+                                },
+                            ],
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=1800,
+                )
+                out = (resp.choices[0].message.content or "").strip()
+                if out:
+                    return out
+            except Exception:
+                continue
 
     if HAS_OCR:
         try:
-            ocr_txt = pytesseract.image_to_string(rgb_img, lang="ara+fra+eng").strip()
-            if ocr_txt:
-                return ocr_txt
+            ocr_out = pytesseract.image_to_string(rgb_img, lang="ara+fra+eng").strip()
+            if ocr_out:
+                return ocr_out
         except Exception:
             pass
 
-    raise RuntimeError(f"تعذر قراءة محتوى الصورة ({filename}): {last_err}")
+    return f"(صورة مرفقة {filename} — أبعادها {pil_img.size})"
 
 # ==========================================
-# 4. استخراج النصوص من الملفات (PDF / Word / صور / نص)
+# 4. استخراج النصوص من الملفات
 # ==========================================
-def extract_content_from_files(uploaded_files, api_key: str) -> str:
+def extract_from_files(uploaded_files, api_key: str, vision_models: list[str]) -> str:
     if not uploaded_files:
         return ""
 
-    blocks = []
+    chunks = []
     for f in uploaded_files:
-        fname = f.name
-        lower = fname.lower()
-        raw = f.getvalue()
+        name = f.name
+        low = name.lower()
+        data = f.getvalue()
 
         try:
-            if lower.endswith(".pdf"):
-                reader = PdfReader(io.BytesIO(raw))
-                pages_txt = []
+            if low.endswith(".pdf"):
+                reader = PdfReader(io.BytesIO(data))
+                pages = []
                 for idx, page in enumerate(reader.pages, start=1):
-                    pt = (page.extract_text() or "").strip()
-                    if pt:
-                        pages_txt.append(f"[صفحة {idx}]\n{pt}")
-                if pages_txt:
-                    blocks.append(f"=== ملف PDF: {fname} ===\n" + "\n\n".join(pages_txt))
+                    t = (page.extract_text() or "").strip()
+                    if t:
+                        pages.append(f"[صفحة {idx}]\n{t}")
+                if pages:
+                    chunks.append(f"=== PDF: {name} ===\n" + "\n\n".join(pages))
                 else:
-                    blocks.append(
-                        f"=== ملف PDF: {fname} ===\n(الملف ممسوح ضوئياً كصور ولا يحتوي على طبقة نصية رقمية مباشرة)."
-                    )
+                    chunks.append(f"=== PDF: {name} ===\n(ملف ممسوح ضوئياً بدون نص رقمي مباشر).")
 
-            elif lower.endswith(".docx"):
-                doc = Document(io.BytesIO(raw))
-                parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-                for t_idx, table in enumerate(doc.tables, start=1):
-                    rows_out = []
-                    for row in table.rows:
-                        cells = [c.text.strip() for c in row.cells if c.text.strip()]
-                        if cells:
-                            rows_out.append(" | ".join(cells))
-                    if rows_out:
-                        parts.append(f"[جدول {t_idx}]\n" + "\n".join(rows_out))
-                blocks.append(f"=== ملف Word (.docx): {fname} ===\n" + "\n".join(parts))
+            elif low.endswith(".docx"):
+                doc = Document(io.BytesIO(data))
+                lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+                for t_idx, tbl in enumerate(doc.tables, start=1):
+                    t_rows = []
+                    for r in tbl.rows:
+                        vals = [c.text.strip() for c in r.cells if c.text.strip()]
+                        if vals:
+                            t_rows.append(" | ".join(vals))
+                    if t_rows:
+                        lines.append(f"[جدول {t_idx}]\n" + "\n".join(t_rows))
+                chunks.append(f"=== Word (.docx): {name} ===\n" + "\n".join(lines))
 
-            elif lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
-                pil_img = Image.open(io.BytesIO(raw))
-                if api_key:
-                    try:
-                        vision_txt = describe_image_with_groq(api_key, pil_img, fname)
-                        blocks.append(f"=== محتوى مستخرج من صورة ({fname}) ===\n{vision_txt}")
-                    except Exception as img_err:
-                        blocks.append(
-                            f"=== صورة مرفقة ({fname}) | الأبعاد: {pil_img.size} ===\nملاحظة: {img_err}"
-                        )
-                else:
-                    ocr_txt = ""
-                    if HAS_OCR:
-                        try:
-                            ocr_txt = pytesseract.image_to_string(pil_img, lang="ara+fra+eng").strip()
-                        except Exception:
-                            ocr_txt = ""
-                    if ocr_txt:
-                        blocks.append(f"=== نص OCR من صورة ({fname}) ===\n{ocr_txt}")
-                    else:
-                        blocks.append(
-                            f"=== صورة مرفقة ({fname}) | الأبعاد: {pil_img.size} ===\n(أدخلي مفتاح Groq API لقراءة نص الصورة تلقائياً)."
-                        )
+            elif low.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                img = Image.open(io.BytesIO(data))
+                extracted = extract_image_text(api_key, img, name, vision_models)
+                chunks.append(f"=== صورة ({name}) ===\n{extracted}")
 
-            elif lower.endswith((".txt", ".md", ".csv", ".json")):
-                text_data = raw.decode("utf-8", errors="ignore").strip()
-                blocks.append(f"=== ملف نصي ({fname}) ===\n{text_data}")
+            elif low.endswith((".txt", ".md", ".csv", ".json")):
+                txt = data.decode("utf-8", errors="ignore").strip()
+                chunks.append(f"=== نص ({name}) ===\n{txt}")
 
             else:
-                fallback_txt = raw.decode("utf-8", errors="ignore").strip()
-                blocks.append(
-                    f"=== ملف مرفق ({fname}) ===\n"
-                    + (fallback_txt if fallback_txt else "تم إرفاق الملف ضمن المرفقات.")
-                )
+                txt = data.decode("utf-8", errors="ignore").strip()
+                chunks.append(f"=== ملف ({name}) ===\n" + (txt if txt else "ملف مرفق."))
 
         except Exception as e:
-            blocks.append(f"=== خطأ في قراءة الملف ({fname}) ===\n{e}")
+            chunks.append(f"=== خطأ في قراءة ({name}) ===\n{e}")
 
-    return "\n\n".join(blocks)
+    return "\n\n".join(chunks)
 
 # ==========================================
-# 5. بناء ملفات التحميل (Word / TXT / PDF / ZIP)
+# 5. تصدير التقرير (Word / TXT / PDF / ZIP)
 # ==========================================
-def build_docx_report(report_text: str, track_label: str) -> bytes:
+def to_docx_bytes(report_text: str, track_label: str) -> bytes:
     doc = Document()
     doc.add_heading(f"تقرير التدقيق القانوني — رصين AI ({track_label})", level=1)
     for line in report_text.splitlines():
-        clean = line.strip()
-        if not clean:
+        s = line.strip()
+        if not s:
             continue
-        if clean.startswith("### "):
-            doc.add_heading(clean.replace("### ", "", 1), level=3)
-        elif clean.startswith("## "):
-            doc.add_heading(clean.replace("## ", "", 1), level=2)
+        if s.startswith("### "):
+            doc.add_heading(s[4:], level=3)
+        elif s.startswith("## "):
+            doc.add_heading(s[3:], level=2)
         else:
-            doc.add_paragraph(clean)
-    buf = io.BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf.getvalue()
+            doc.add_paragraph(s)
+    out = io.BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return out.getvalue()
 
 
-def find_arabic_ttf_font() -> str | None:
-    candidates = [
+def find_font_file() -> str | None:
+    paths = [
         "Amiri-Regular.ttf",
         "Cairo-Regular.ttf",
         "NotoNaskhArabic-Regular.ttf",
         "DejaVuSans.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
+    for p in paths:
+        if os.path.exists(p):
+            return p
     return None
 
 
-def build_pdf_report(report_text: str, track_label: str) -> bytes | None:
-    font_path = find_arabic_ttf_font()
-    if not font_path:
+def to_pdf_bytes(report_text: str, track_label: str) -> bytes | None:
+    font_file = find_font_file()
+    if not font_file:
         return None
-
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    pdf.add_font("RaseenFont", "", font_path, uni=True)
-    pdf.set_font("RaseenFont", size=13)
+    pdf.add_font("RaseenCustom", "", font_file, uni=True)
+    pdf.set_font("RaseenCustom", size=13)
     pdf.multi_cell(0, 9, f"تقرير التدقيق القانوني — رصين AI ({track_label})")
-    pdf.ln(4)
-    pdf.set_font("RaseenFont", size=10)
+    pdf.ln(3)
+    pdf.set_font("RaseenCustom", size=10)
     pdf.multi_cell(0, 7, report_text)
-    out = pdf.output(dest="S")
-    if isinstance(out, (bytes, bytearray)):
-        return bytes(out)
-    return str(out).encode("utf-8", errors="ignore")
+    res = pdf.output(dest="S")
+    return bytes(res) if isinstance(res, (bytes, bytearray)) else str(res).encode("utf-8", errors="ignore")
 
 
-def build_zip_report(report_text: str, track_label: str, uploaded_files) -> bytes:
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+def to_zip_bytes(report_text: str, track_label: str, uploaded_files) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("rapport_raseen_ai.txt", report_text.encode("utf-8"))
-        zf.writestr("rapport_raseen_ai.docx", build_docx_report(report_text, track_label))
-
-        pdf_bytes = build_pdf_report(report_text, track_label)
-        if pdf_bytes:
-            zf.writestr("rapport_raseen_ai.pdf", pdf_bytes)
-
+        zf.writestr("rapport_raseen_ai.docx", to_docx_bytes(report_text, track_label))
+        pdf_data = to_pdf_bytes(report_text, track_label)
+        if pdf_data:
+            zf.writestr("rapport_raseen_ai.pdf", pdf_data)
         if uploaded_files:
             for f in uploaded_files:
-                zf.writestr(f"fichiers_sources/{f.name}", f.getvalue())
-
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
+                zf.writestr(f"sources/{f.name}", f.getvalue())
+    buf.seek(0)
+    return buf.getvalue()
 
 # ==========================================
-# 6. واجهة المستخدم الرئيسية
+# 6. الواجهة الرئيسية
 # ==========================================
 st.markdown(
     """
-    <div class="raseen-header">
-        <h1>⚖️ رصين AI — منصة التدقيق والامتثال القانوني</h1>
-        <p>تدقيق النصوص والملفات (PDF • Word • صور • نص) وتصدير التقارير (Word • PDF • TXT • ZIP)</p>
+    <div class="hero-card">
+        <div class="hero-badge">RASEEN AI • LEGAL & COMPLIANCE</div>
+        <h1 class="hero-title">⚖️ رصين AI للتدقيق والامتثال القانوني</h1>
+        <p class="hero-sub">تحليل النصوص والملفات (PDF • Word • صور • نص) وتصدير التقارير بصيغ متعددة.</p>
+    </div>
+    <div class="legend-strip">
+        <div class="legend-pill">🔴 مخالفة / خطأ قانوني</div>
+        <div class="legend-pill">🟠 تنبيه / مراجعة</div>
+        <div class="legend-pill">🟢 متوافق / سليم</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+api_key = get_groq_api_key()
+text_models, vision_models = fetch_available_groq_models(api_key)
+
 with st.sidebar:
-    st.header("إعدادات المنصة")
-    api_key_existing = get_groq_api_key()
-    if not api_key_existing:
+    st.markdown("### الإعدادات")
+    if not api_key:
         st.text_input(
-            "مفتاح GROQ_API_KEY (مؤقت للجلسة)",
+            "مفتاح GROQ_API_KEY",
             type="password",
             key="manual_groq_key",
-            help="يُفضّل إضافته في Streamlit Secrets باسم GROQ_API_KEY",
         )
+        api_key = get_groq_api_key()
+        text_models, vision_models = fetch_available_groq_models(api_key)
     else:
-        st.success("مفتاح Groq مفعّل")
+        st.success("مفتاح Groq متصل")
 
-    selected_model = st.selectbox(
-        "نموذج التدقيق النصي (Groq)",
-        options=TEXT_MODELS,
-        index=0,
-    )
+    chosen_model = st.selectbox("النموذج النشط", options=text_models, index=0)
 
-st.markdown(
-    """
-    <div class="signal-box signal-red">🔴 أحمر: خطأ أو مخالفة قانونية + النص القانوني الجزائري الواجب تطبيقه</div>
-    <div class="signal-box signal-orange">🟠 برتقالي: تنبيه أو نقطة تحتاج مراجعة + المرجع القانوني المناسب</div>
-    <div class="signal-box signal-green">🟢 أخضر: بند صحيح ومتوافق قانونياً</div>
-    """,
-    unsafe_allow_html=True,
-)
-
-col_track, col_context = st.columns([1, 2])
-with col_track:
+with st.container():
     track = st.radio(
-        "اختر مسار التدقيق",
-        options=["B2G (صفقات عمومية / إدارات)", "B2B (عقود / شركات / امتثال)"],
-        horizontal=False,
-    )
-with col_context:
-    extra_notes = st.text_input(
-        "ملاحظة أو سياق إضافي (اختياري)",
-        placeholder="مثال: دفتر شروط بلدي، عقد خدمات، قانون 23-12، شركة مساهمة بسيطة...",
+        "مسار التدقيق",
+        options=["B2G — صفقات عمومية وإدارات", "B2B — عقود وشركات وامتثال"],
+        horizontal=True,
     )
 
-manual_text = st.text_area(
-    "أدخل النص القانوني أو البند المراد تدقيقه (اختياري إذا رفعتِ ملفاً)",
-    height=170,
-    placeholder="الصقي هنا نص العقد، دفتر الشروط، أو القرار الإداري...",
-)
+    context_note = st.text_input(
+        "سياق أو مرجع إضافي (اختياري)",
+        placeholder="مثال: دفتر شروط، عقد خدمات، قانون 23-12، شركة مساهمة بسيطة...",
+    )
 
-uploaded_files = st.file_uploader(
-    "رفع الملفات للتدقيق (PDF، Word، صور، نصوص — اختياري)",
-    type=["pdf", "docx", "png", "jpg", "jpeg", "webp", "txt", "md", "csv", "json"],
-    accept_multiple_files=True,
-)
+    raw_text = st.text_area(
+        "النص القانوني المراد تدقيقه (اختياري إذا رفعتِ ملفاً)",
+        height=150,
+        placeholder="اكتبي أو الصقي النص هنا...",
+    )
 
-if "audit_report" not in st.session_state:
-    st.session_state.audit_report = ""
-if "used_model_label" not in st.session_state:
-    st.session_state.used_model_label = ""
+    uploaded_files = st.file_uploader(
+        "رفع الملفات (PDF، Word، صور، نص — اختياري)",
+        type=["pdf", "docx", "png", "jpg", "jpeg", "webp", "txt", "md", "csv", "json"],
+        accept_multiple_files=True,
+    )
 
-run_clicked = st.button("🚀 تشغيل التدقيق القانوني الشامل", type="primary")
+if "report_output" not in st.session_state:
+    st.session_state.report_output = ""
+if "model_used" not in st.session_state:
+    st.session_state.model_used = ""
 
-if run_clicked:
-    active_key = get_groq_api_key()
-    if not active_key:
+if st.button("🚀 بدء التدقيق القانوني", type="primary"):
+    if not api_key:
         st.error("يرجى ضبط GROQ_API_KEY في Streamlit Secrets أو إدخاله في القائمة الجانبية.")
     elif not HAS_GROQ:
-        st.error("مكتبة groq غير مثبّتة. أضيفي groq إلى ملف requirements.txt.")
+        st.error("مكتبة groq غير مثبّتة في requirements.txt.")
     else:
-        with st.spinner("جاري استخراج محتوى الملفات وإجراء التدقيق القانوني..."):
-            files_text = extract_content_from_files(uploaded_files, active_key)
-            combined_parts = []
-            if extra_notes.strip():
-                combined_parts.append(f"سياق إضافي: {extra_notes.strip()}")
-            if manual_text.strip():
-                combined_parts.append(f"النص المدخل يدوياً:\n{manual_text.strip()}")
-            if files_text.strip():
-                combined_parts.append(f"محتوى الملفات المرفوعة:\n{files_text.strip()}")
+        with st.spinner("جاري استخراج البيانات والتدقيق القانوني..."):
+            extracted = extract_from_files(uploaded_files, api_key, vision_models)
+            parts = []
+            if context_note.strip():
+                parts.append(f"السياق: {context_note.strip()}")
+            if raw_text.strip():
+                parts.append(f"النص المدخل:\n{raw_text.strip()}")
+            if extracted.strip():
+                parts.append(f"محتوى الملفات المرفوعة:\n{extracted.strip()}")
 
-            full_payload = "\n\n".join(combined_parts).strip()
-
-            if not full_payload:
-                st.warning("أدخلي نصاً للتدقيق أو ارفعي ملفاً واحداً على الأقل (PDF / Word / صورة / نص).")
+            combined = "\n\n".join(parts).strip()
+            if not combined:
+                st.warning("أدخلي نصاً أو ارفعي ملفاً واحداً على الأقل.")
             else:
                 try:
-                    final_prompt = (
-                        f"المسار: {track}\n\n"
-                        f"المادة المطلوب تدقيقها:\n{full_payload[:28000]}"
-                    )
-                    report_out, used_m = run_groq_text_audit(active_key, final_prompt, selected_model)
-                    st.session_state.audit_report = report_out
-                    st.session_state.used_model_label = used_m
-                except Exception as err:
-                    st.error(f"حدث خطأ أثناء تنفيذ التدقيق: {err}")
+                    prompt_payload = f"المسار: {track}\n\nالمادة المطلوب تدقيقها:\n{combined[:28000]}"
+                    report_txt, active_m = run_groq_audit(api_key, prompt_payload, chosen_model, text_models)
+                    st.session_state.report_output = report_txt
+                    st.session_state.model_used = active_m
+                except Exception as exc:
+                    st.error(f"تعذر إتمام التدقيق: {exc}")
 
-# ==========================================
-# 7. عرض التقرير وتحميله بجميع الصيغ
-# ==========================================
-if st.session_state.audit_report:
-    st.divider()
-    st.subheader("📋 تقرير التدقيق القانوني")
-    if st.session_state.used_model_label:
-        st.caption(f"تم التوليد عبر النموذج النشط: `{st.session_state.used_model_label}`")
+if st.session_state.report_output:
+    st.markdown("---")
+    st.markdown("### 📄 تقرير التدقيق")
+    if st.session_state.model_used:
+        st.caption(f"النموذج المنفّذ: `{st.session_state.model_used}`")
+    st.markdown(st.session_state.report_output)
 
-    st.markdown(st.session_state.audit_report)
-
-    st.divider()
-    st.subheader("⬇️ تحميل التقرير والملفات")
-
-    report_str = st.session_state.audit_report
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
+    st.markdown("### ⬇️ تحميل التقرير")
+    rep = st.session_state.report_output
+    col_a, col_b = st.columns(2)
+    with col_a:
         st.download_button(
-            label="📄 تحميل Word (.docx)",
-            data=build_docx_report(report_str, track),
+            "تحميل Word (.docx)",
+            data=to_docx_bytes(rep, track),
             file_name="rapport_raseen_ai.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
-
-    with c2:
-        st.download_button(
-            label="📝 تحميل نص (.txt)",
-            data=report_str.encode("utf-8"),
-            file_name="rapport_raseen_ai.txt",
-            mime="text/plain; charset=utf-8",
-        )
-
-    with c3:
-        pdf_bytes = build_pdf_report(report_str, track)
-        if pdf_bytes:
+        pdf_out = to_pdf_bytes(rep, track)
+        if pdf_out:
             st.download_button(
-                label="📕 تحميل PDF (.pdf)",
-                data=pdf_bytes,
+                "تحميل PDF (.pdf)",
+                data=pdf_out,
                 file_name="rapport_raseen_ai.pdf",
                 mime="application/pdf",
             )
         else:
             st.download_button(
-                label="📕 تحميل PDF كملف نصي (.txt)",
-                data=report_str.encode("utf-8"),
-                file_name="rapport_raseen_ai_pdf_ready.txt",
+                "تحميل نص التقرير (.txt)",
+                data=rep.encode("utf-8"),
+                file_name="rapport_raseen_ai.txt",
                 mime="text/plain; charset=utf-8",
-                help="أضيفي ملف خط عربي مثل Amiri-Regular.ttf في GitHub لتفعيل تصدير PDF المباشر.",
             )
-
-    with c4:
+    with col_b:
         st.download_button(
-            label="🗜️ حزمة كاملة (.zip)",
-            data=build_zip_report(report_str, track, uploaded_files),
+            "تحميل نص (.txt)",
+            data=rep.encode("utf-8"),
+            file_name="rapport_raseen_ai.txt",
+            mime="text/plain; charset=utf-8",
+        )
+        st.download_button(
+            "تحميل حزمة كاملة (.zip)",
+            data=to_zip_bytes(rep, track, uploaded_files),
             file_name="raseen_ai_package.zip",
             mime="application/zip",
         ) 
