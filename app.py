@@ -1,5 +1,6 @@
 import base64
 import io
+import re
 import streamlit as st
 from groq import Groq
 from pypdf import PdfReader
@@ -16,14 +17,13 @@ MAX_CONTRACTOR_CHARS = 16000
 CANDIDATE_TEXT_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
+    "qwen/qwen3-32b",
     "gemma2-9b-it",
-    "mixtral-8x7b-32768",
 ]
 
 CANDIDATE_VISION_MODELS = [
     "meta-llama/llama-4-scout-17b-16e-instruct",
-    "llama-3.2-90b-vision-preview",
-    "llama-3.2-11b-vision-preview",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
 ]
 
 B2B_TARGET_USERS = [
@@ -128,10 +128,6 @@ CUSTOM_STYLES = """
         font-weight: 700;
         padding: 0.65rem 1.2rem;
     }
-    .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #163a5c 0%, #245f94 100%);
-        border-color: #f3d57b;
-    }
 </style>
 """.strip()
 
@@ -169,10 +165,10 @@ def get_available_models_order(client: Groq, candidates: list[str], vision_only:
             if mid in ordered:
                 continue
             if vision_only:
-                if "vision" in mid or "scout" in mid or "maverick" in mid:
+                if "scout" in mid or "maverick" in mid or "vision" in mid:
                     ordered.append(mid)
             else:
-                if any(k in mid for k in ("llama", "gemma", "mixtral", "qwen", "deepseek")):
+                if any(k in mid for k in ("llama", "qwen", "gemma")):
                     ordered.append(mid)
     except Exception:
         pass
@@ -200,16 +196,16 @@ def extract_pdf_text(raw_bytes: bytes) -> tuple[str, int]:
     return "\n\n".join(pages), total_pages
 
 
-def extract_images_from_pdf(raw_bytes: bytes, max_images: int = 4) -> list[tuple[str, str]]:
+def extract_images_from_pdf(raw_bytes: bytes, max_images: int = 3) -> list[tuple[str, str]]:
     images_out = []
     try:
         reader = PdfReader(io.BytesIO(raw_bytes))
-        for p_idx, page in enumerate(reader.pages, start=1):
-            for img_idx, img_file in enumerate(getattr(page, "images", []), start=1):
+        for page in reader.pages:
+            for img_file in getattr(page, "images", []):
                 data = getattr(img_file, "data", None)
                 if data:
                     b64 = base64.b64encode(data).decode("utf-8")
-                    images_out.append((f"image/jpeg", b64))
+                    images_out.append(("image/jpeg", b64))
                     if len(images_out) >= max_images:
                         return images_out
     except Exception:
@@ -217,7 +213,15 @@ def extract_images_from_pdf(raw_bytes: bytes, max_images: int = 4) -> list[tuple
     return images_out
 
 
-def prepare_tender_payload(uploaded_file) -> dict:
+def prepare_tender_payload(uploaded_file, fallback_manual_text: str) -> dict:
+    if fallback_manual_text.strip():
+        return {
+            "kind": "text",
+            "label": f"{uploaded_file.name if uploaded_file else 'نص مدخل يدوياً'}",
+            "text": fallback_manual_text.strip(),
+            "images": [],
+        }
+
     raw_bytes = uploaded_file.getvalue()
     name_lower = uploaded_file.name.lower()
 
@@ -230,7 +234,7 @@ def prepare_tender_payload(uploaded_file) -> dict:
                 "text": text,
                 "images": [],
             }
-        embedded_imgs = extract_images_from_pdf(raw_bytes, max_images=4)
+        embedded_imgs = extract_images_from_pdf(raw_bytes, max_images=3)
         if embedded_imgs:
             return {
                 "kind": "images",
@@ -278,7 +282,14 @@ def extract_contractor_files_text(contractor_files) -> str:
     return _trim_text("\n\n".join(parts), MAX_CONTRACTOR_CHARS)
 
 
-def build_system_prompt(language: str, circuit: str) -> str:
+def count_traffic_signals(report_text: str) -> tuple[int, int, int]:
+    red_matches = re.findall(r"🔴\s*أحمر\s*:\s*خطأ|🔴", report_text)
+    amber_matches = re.findall(r"🟠\s*برتقالي\s*:\s*تنبيه|🟠", report_text)
+    green_matches = re.findall(r"🟢\s*أخضر\s*:\s*صحيح|🟢", report_text)
+    return len(red_matches), len(amber_matches), len(green_matches)
+
+
+def build_system_prompt(language: str, circuit: str, has_contractor_file: bool) -> str:
     if language == "العربية":
         lang_rule = "اكتب كامل التقرير باللغة العربية القانونية الواضحة والدقيقة."
     elif language == "Français":
@@ -289,293 +300,7 @@ def build_system_prompt(language: str, circuit: str) -> str:
     mandatory_rules = """
 قواعد إلزامية في جميع الحالات وفي كلا المسارين (B2G وB2B):
 1. الإشارات الضوئية في كل بند أو عنصر أو مقارنة:
-   - 🔴 أحمر: خطأ (مخالفة قانونية أو خلل جوهري أو نقص مؤثر في الوثائق أو التواقيع أو الشروط).
+   - 🔴 أحمر: خطأ (مخالفة قانونية أو خلل جسيم أو نقص مؤثر في الوثائق أو التواقيع أو الشروط).
    - 🟠 برتقالي: تنبيه (نقطة تحتاج إلى مراجعة أو توضيح أو استكمال أو تحقق إضافي).
    - 🟢 أخضر: صحيح (بند أو وثيقة أو توقيع أو إجراء مطابق ومستوفٍ).
-2. عند ظهور أي (🔴 أحمر: خطأ) أو (🟠 برتقالي: تنبيه): يجب فوراً ذكر القانون أو النص القانوني الصحيح الواجب تطبيقه من المدونة القانونية المعتمدة مع بيان الحكم القانوني الصحيح.
-3. في كل حالة تتعلق بالإلغاء (إلغاء الإجراء، إلغاء الصفقة أو المناقصة، إلغاء العقد أو الفسخ أو الإبطال، أو إلغاء بند أو شرط أو عرض أو وثيقة أو توقيع): يجب تحديد القانون الصحيح الواجب تطبيقه بوضوح، وبيان الشروط والأحكام القانونية الصحيحة للإلغاء وآثاره.
-""".strip()
-
-    if circuit.startswith("B2G"):
-        circuit_rule = """
-المسار المختار هو B2G (الصفقات العمومية والمناقصات العمومية):
-ابدأ بجدول أو ملخص يبرز الإشارات الضوئية (🔴 أحمر: خطأ / 🟠 برتقالي: تنبيه / 🟢 أخضر: صحيح) مع ذكر القانون الصحيح الواجب تطبيقه لكل خطأ أو تنبيه أو حالة إلغاء، ثم فصّل التحليل القانوني وخصص قسماً واضحاً لحالات الإلغاء والقانون الصحيح الواجب تطبيقه فيها.
-""".strip()
-    else:
-        circuit_rule = """
-المسار المختار هو B2B (مقارنة دفتر الشروط / العقد بملف المقاول أو المؤسسة الاقتصادية المشاركة):
-يستفيد من هذا المسار: المقاولون والمؤسسات الاقتصادية، المؤسسات الناشئة وحاملو المشاريع المبتكرة، شركات المساهمة البسيطة والشركات التجارية، مكاتب الدراسات والاستشارة، المتعاملون من الباطن، والمستشارون القانونيون ومديرو العقود.
-قارن بدقة بين متطلبات دفتر الشروط أو العقد وبين ما يملكه المقاول أو المؤسسة الاقتصادية من وثائق وتواقيع، مع التركيز على:
-- السجل التجاري، البطاقة الجبائية والرقم الإحصائي وشهادات الأداء والضرائب، شهادات شبه الضمان الاجتماعي، القانون الأساسي وتفويض التوقيع، شهادات التأهيل والتصنيف أو الاعتماد، المراجع المهنية والقدرات، والتواقيع والأختام والتصريحات.
-وطبّق الإشارات الضوئية (🔴 أحمر: خطأ / 🟠 برتقالي: تنبيه / 🟢 أخضر: صحيح) على كل وثيقة أو توقيع أو بند، مع ذكر القانون الصحيح الواجب تطبيقه فوراً عند أي خطأ أو تنبيه أو حالة إلغاء.
-""".strip()
-
-    return f"""
-أنت المستشار القانوني الذكي لمنصة رصين AI المتخصصة في تدقيق العقود والصفقات العمومية والمناقصات وفق القانون الجزائري.
-{lang_rule}
-
-{mandatory_rules}
-
-{circuit_rule}
-
-المرجعية القانونية المعتمدة:
-{LEGAL_REFERENCES_CORPUS}
-""".strip()
-
-
-def build_text_prompt(
-    language: str,
-    circuit: str,
-    sector: str,
-    b2b_profile: str,
-    tender_label: str,
-    tender_text: str,
-    contractor_summary: str,
-) -> str:
-    safe_tender_text = _trim_text(tender_text, MAX_TENDER_CHARS)
-    user_content = f"""
-اللغة المطلوبة: {language}
-المسار: {circuit}
-القطاع: {sector}
-ملف دفتر الشروط / العقد / المناقصة: {tender_label}
-
-محتوى دفتر الشروط / العقد / المناقصة:
-\"\"\"
-{safe_tender_text}
-\"\"\"
-""".strip()
-
-    if circuit.startswith("B2B"):
-        user_content += f"""
-
-الفئة المستفيدة في مسار B2B: {b2b_profile}
-الوثائق الأساسية الواجب مطابقتها مع دفتر الشروط: {", ".join(B2B_KEY_DOCUMENTS)}
-
-ملف المقاول / المؤسسة الاقتصادية المشاركة في الصفقة أو المناقصة (الوثائق والتواقيع المرفقة):
-\"\"\"
-{contractor_summary if contractor_summary else "لم يتم رفع أو استخراج نصوص من ملفات المتعهد بعد؛ قارن متطلبات دفتر الشروط بالوثائق الأساسية (السجل التجاري، الضرائب، شبه الضمان الاجتماعي، القانون الأساسي، التأهيل، المراجع، والتواقيع والأختام) ونبّه إلى النواقص المحتملة مع تطبيق الإشارات الضوئية والقانون الصحيح الواجب تطبيقه."}
-\"\"\"
-"""
-    return user_content
-
-
-def run_audit(
-    client: Groq,
-    language: str,
-    circuit: str,
-    sector: str,
-    b2b_profile: str,
-    payload: dict,
-    contractor_summary: str,
-) -> tuple[str, str]:
-    sys_prompt = build_system_prompt(language, circuit)
-
-    if payload["kind"] == "text":
-        user_content = build_text_prompt(
-            language=language,
-            circuit=circuit,
-            sector=sector,
-            b2b_profile=b2b_profile,
-            tender_label=payload["label"],
-            tender_text=payload["text"],
-            contractor_summary=contractor_summary,
-        )
-        models_to_try = get_available_models_order(client, CANDIDATE_TEXT_MODELS, vision_only=False)
-        last_error = None
-        for model_name in models_to_try:
-            try:
-                completion = client.chat.completions.create(
-                    model=model_name,
-                    messages=[
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=0.2,
-                )
-                content = (completion.choices[0].message.content or "").strip()
-                if content:
-                    return content, model_name
-            except Exception as exc:
-                last_error = exc
-                continue
-        raise RuntimeError(f"تعذر تشغيل التدقيق النصي على Groq. آخر خطأ: {last_error}")
-
-    vision_instruction = build_text_prompt(
-        language=language,
-        circuit=circuit,
-        sector=sector,
-        b2b_profile=b2b_profile,
-        tender_label=payload["label"],
-        tender_text="[اقرأ النص الموجود في الصورة/الصور المرفقة لدفتر الشروط أو العقد أو المناقصة بدقة ثم قم بتدقيقه قانونياً]",
-        contractor_summary=contractor_summary,
-    )
-    content_blocks = [{"type": "text", "text": vision_instruction}]
-    for mime_type, b64_str in payload["images"]:
-        content_blocks.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime_type};base64,{b64_str}"},
-            }
-        )
-
-    vision_models = get_available_models_order(client, CANDIDATE_VISION_MODELS, vision_only=True)
-    last_error = None
-    for v_model in vision_models:
-        try:
-            completion = client.chat.completions.create(
-                model=v_model,
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": content_blocks},
-                ],
-                temperature=0.2,
-            )
-            content = (completion.choices[0].message.content or "").strip()
-            if content:
-                return content, v_model
-        except Exception as exc:
-            last_error = exc
-            continue
-
-    raise RuntimeError(
-        f"لم يتمكن نموذج الرؤية في Groq من قراءة الصورة المرفوعة ({last_error}). يُفضّل رفع ملف PDF يحتوي على نص قابل للنسخ."
-    )
-
-
-st.markdown(CUSTOM_STYLES, unsafe_allow_html=True)
-
-st.markdown(
-    f"""
-    <div class="raseen-hero">
-        <div>{RASEEN_LOGO_SVG}</div>
-        <div>
-            <h1 class="raseen-hero-title">منصة التدقيق القانوني الذكي — المستشار القانوني الذكي رصين AI</h1>
-            <p class="raseen-hero-sub">خاص بتدقيق العقود والصفقات العمومية والمناقصات</p>
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-with st.sidebar:
-    st.subheader("اختيار اللغة")
-    selected_language = st.selectbox(
-        "اللغة",
-        options=["العربية", "Français", "ثنائي اللغة (عربي / فرنسي)"],
-        label_visibility="collapsed",
-    )
-
-    st.divider()
-    st.subheader("إعدادات المسار والقطاع")
-    circuit = st.selectbox(
-        "المسار",
-        options=["B2G (الصفقات العمومية والمناقصات)", "B2B (ملف المقاول / المؤسسة الاقتصادية)"],
-    )
-    sector = st.selectbox(
-        "القطاع",
-        options=[
-            "البناء والأشغال العمومية (Travaux)",
-            "الخدمات العامة (Services Publics)",
-            "التوريدات والمعدات (Fournitures)",
-            "الرقمنة والخدمات التقنية",
-        ],
-    )
-
-st.subheader("تحميل دفتر الشروط / العقد / المناقصة (PDF أو صورة)")
-tender_file = st.file_uploader(
-    "اختر ملف دفتر الشروط أو العقد أو المناقصة (PDF أو JPG / PNG)",
-    type=["pdf", "png", "jpg", "jpeg"],
-    key="tender_file",
-)
-
-b2b_profile = B2B_TARGET_USERS[0]
-contractor_files = []
-
-if circuit.startswith("B2B"):
-    st.divider()
-    st.markdown("### الفئات المستفيدة والوثائق المطلوب مطابقتها مع دفتر الشروط (B2B)")
-    b2b_profile = st.selectbox("اختر الفئة المستفيدة في مسار B2B", options=B2B_TARGET_USERS)
-
-    info_col1, info_col2 = st.columns(2)
-    with info_col1:
-        users_html = "".join(f"<li>{item}</li>" for item in B2B_TARGET_USERS)
-        st.markdown(
-            f"""
-            <div class="raseen-card">
-                <h4>من يحتاج هذا التطبيق في مسار B2B؟</h4>
-                <ul>{users_html}</ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with info_col2:
-        docs_html = "".join(f"<li>{doc}</li>" for doc in B2B_KEY_DOCUMENTS)
-        st.markdown(
-            f"""
-            <div class="raseen-card raseen-card-gold">
-                <h4>الوثائق المهمة لمطابقتها مع دفتر الشروط</h4>
-                <ul>{docs_html}</ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.subheader("تحميل ملف المقاول أو المؤسسة الاقتصادية المشاركة في الصفقة أو المناقصة")
-    contractor_files = st.file_uploader(
-        "ارفع وثائق وتواقيع المقاول أو المؤسسة الاقتصادية (السجل التجاري، الشهادات، القانون الأساسي، التواقيع — PDF أو صور)",
-        type=["pdf", "png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-        key="contractor_files",
-    )
-
-if st.button("تشغيل التدقيق القانوني", type="primary", use_container_width=True):
-    if tender_file is None:
-        st.warning("يرجى تحميل ملف دفتر الشروط أو العقد أو المناقصة أولاً.")
-        st.stop()
-
-    try:
-        payload = prepare_tender_payload(tender_file)
-    except Exception as exc:
-        st.error(f"تعذر قراءة الملف المرفوع: {exc}")
-        st.stop()
-
-    if payload["kind"] == "empty":
-        st.error(
-            f"تم رفع الملف ({payload['label']})، لكنه لا يحتوي على نص رقمي مباشر ولا على صور مدمجة قابلة للقراءة. يُرجى رفع صورة واضحة (`JPG` / `PNG`) أو ملف `PDF` يحتوي على نص قابل للنسخ."
-        )
-        st.stop()
-
-    contractor_text = ""
-    if circuit.startswith("B2B"):
-        contractor_text = extract_contractor_files_text(contractor_files)
-        if not contractor_files:
-            st.info("ملاحظة: لم يتم رفع ملف للمقاول أو المؤسسة الاقتصادية؛ سيتم تدقيق دفتر الشروط وتحديد الأوراق والتواقيع المطلوبة من المتعهد.")
-
-    st.markdown("### الإشارات الضوئية للتدقيق القانوني")
-    col_red, col_amber, col_green = st.columns(3)
-    with col_red:
-        st.error("🔴 أحمر: خطأ + القانون الصحيح الواجب تطبيقه")
-    with col_amber:
-        st.warning("🟠 برتقالي: تنبيه + القانون الصحيح الواجب تطبيقه")
-    with col_green:
-        st.success("🟢 أخضر: صحيح")
-
-    with st.spinner("جاري إجراء التدقيق القانوني عبر الذكاء الاصطناعي..."):
-        try:
-            groq_client = get_groq_client()
-            report, used_model = run_audit(
-                client=groq_client,
-                language=selected_language,
-                circuit=circuit,
-                sector=sector,
-                b2b_profile=b2b_profile,
-                payload=payload,
-                contractor_summary=contractor_text,
-            )
-            st.caption(f"النموذج المنفّذ: {used_model} | الملف: {payload['label']}")
-            st.markdown("### تقرير المستشار القانوني الذكي — رصين AI")
-            st.markdown(report)
-            with st.expander("المرجعية القانونية المعتمدة في التدقيق"):
-                st.text(LEGAL_REFERENCES_CORPUS)
-        except Exception as exc:
-            st.error(f"حدث خطأ أثناء تنفيذ التدقيق: {exc}") 
+2. تحديد العدد الدقيق في بداية التقرير: يجب أن يبدأ التقرير بفقرة أو جدول "حصيلة الإشارات الضوئية بالأرقام" يذكر صراحة عدد الأخطاء الجسيمة (🔴 أحمر: خطأ)، وعدد التنبيهات (🟠 برتقالي: تنبيه)، وعدد البنود الصحيحة (
