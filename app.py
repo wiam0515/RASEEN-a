@@ -85,90 +85,128 @@ def extract_uploaded_text(uploaded_file) -> str:
     return raw_bytes.decode("utf-8", errors="replace")
 
 
-def analyze_document_text(doc_title: str, doc_type: str, target_mode: str, text: str, lang: str) -> dict:
-    """تحليل مبدئي منظم يحدد البنود الحساسة والتنبيهات والمطابقة وفق النصوص والضوابط الجزائرية."""
+def analyze_documents(
+    doc_title: str,
+    doc_type: str,
+    target_mode: str,
+    cahier_text: str,
+    operator_text: str,
+    operator_file_name: str,
+    lang: str,
+) -> dict:
+    """تدقيق دفتر الشروط وحده، أو مقارنته بملف المتعامل إذا تم رفعه اختيارياً."""
     is_ar = lang == "ar"
-    clean_text = (text or "").strip()
-    lower_text = clean_text.lower()
+    clean_cahier = (cahier_text or "").strip()
+    clean_operator = (operator_text or "").strip()
+    has_operator = bool(clean_operator or operator_file_name)
+
+    combined_lower = f"{clean_cahier}\n{clean_operator}".lower()
 
     red_flags = []
     orange_flags = []
     green_checks = []
 
-    # فحوصات عملية على العقود، دفاتر الشروط، والملفات الإدارية
     high_risk_keywords = [
         "فسخ فوري", "غرامات تأخير", "إقصاء", "مسؤولية مطلقة", "تنازل",
-        "résiliation unilatérale", "pénalité", "exclusion", "responsabilité illimitée"
+        "résiliation unilatérale", "pénalité", "exclusion", "responsabilité illimitée",
     ]
     caution_keywords = [
         "آجال", "ضمان", "كفالة", "تحكيم", "تعديل", "سرية", "معطيات شخصية", "توقيع إلكتروني",
-        "délai", "garantie", "caution", "arbitrage", "avenant", "confidentialité", "données personnelles"
+        "délai", "garantie", "caution", "arbitrage", "avenant", "confidentialité", "données personnelles",
     ]
 
     for kw in high_risk_keywords:
-        if kw in lower_text:
+        if kw in combined_lower:
             red_flags.append(
-                (f"بند عالي الحساسية ({kw})" if is_ar else f"Clause sensible ({kw})"),
                 (
-                    "يستوجب التحقق الدقيق من التوازن التعاقدي والالتزام بقانون الصفقات العمومية (23-12) أو القانون المدني/التجاري قبل التوقيع."
-                    if is_ar else
-                    "Vérifier l'équilibre contractuel et la conformité au cadre juridique algérien (loi 23-12 et textes connexes)."
-                ),
+                    (f"بند عالي الحساسية ({kw})" if is_ar else f"Clause sensible ({kw})"),
+                    (
+                        "يستوجب التحقق الدقيق من التوازن التعاقدي والالتزام بقانون الصفقات العمومية (23-12) أو القانون المدني/التجاري قبل التوقيع أو الإيداع."
+                        if is_ar
+                        else "Vérifier l'équilibre contractuel et la conformité au cadre juridique algérien (loi 23-12 et textes connexes)."
+                    ),
+                )
             )
 
     for kw in caution_keywords:
-        if kw in lower_text:
+        if kw in combined_lower:
             orange_flags.append(
-                (f"نقطة تتطلب تدقيقاً ({kw})" if is_ar else f"Point à vérifier ({kw})"),
                 (
-                    "التأكد من وضوح الآجال، الضمانات، أو أحكام حماية المعطيات الشخصية (18-07 / 25-11) والتوقيع/العقد الإلكتروني (15-04 / 18-05 / 26-02)."
-                    if is_ar else
-                    "Vérifier les délais, garanties, protection des données (18-07 / 25-11) et règles électroniques (15-04 / 18-05 / 26-02)."
-                ),
+                    (f"نقطة تتطلب تدقيقاً ({kw})" if is_ar else f"Point à vérifier ({kw})"),
+                    (
+                        "التأكد من وضوح الآجال، الضمانات، أو أحكام حماية المعطيات الشخصية (18-07 / 25-11) والتوقيع/العقد الإلكتروني (15-04 / 18-05 / 26-02)."
+                        if is_ar
+                        else "Vérifier les délais, garanties, protection des données (18-07 / 25-11) et règles électroniques (15-04 / 18-05 / 26-02)."
+                    ),
+                )
             )
 
     if not red_flags:
         red_flags.append(
-            ("عدم رصد مخالفة صريحة فورية في العينة المدققة" if is_ar else "Aucune anomalie critique détectée dans l'extrait"),
             (
-                "يُفضّل مراجعة الملاحق والشروط الخاصة بدقة مع إشراف مختص قانوني عند وجود التزامات مالية كبيرة."
-                if is_ar else
-                "Une validation juridique humaine reste recommandée pour les clauses financières et annexes."
-            ),
+                ("عدم رصد مخالفة صريحة فورية في العينة المدققة" if is_ar else "Aucune anomalie critique détectée dans l'extrait"),
+                (
+                    "يُفضّل مراجعة الملاحق والشروط الخاصة بدقة مع إشراف مختص قانوني عند وجود التزامات مالية كبيرة."
+                    if is_ar
+                    else "Une validation juridique humaine reste recommandée pour les clauses financières et annexes."
+                ),
+            )
         )
 
     if not orange_flags:
         orange_flags.append(
-            ("مراجعة الشروط الشكلية والآجال والوثائق المرفقة" if is_ar else "Vérification des délais et pièces justificatives"),
             (
-                "التحقق من اكتمال الملف الإداري والجبائي ومطابقة الآجال لدفتر الشروط أو العقد."
-                if is_ar else
-                "Contrôler la complétude du dossier administratif/fiscal et la cohérence des délais."
-            ),
+                ("مراجعة الشروط الشكلية والآجال والوثائق المرفقة" if is_ar else "Vérification des délais et pièces justificatives"),
+                (
+                    "التحقق من اكتمال الملف الإداري والجبائي ومطابقة الآجال لدفتر الشروط أو العقد."
+                    if is_ar
+                    else "Contrôler la complétude du dossier administratif/fiscal et la cohérence des délais."
+                ),
+            )
+        )
+
+    # حالة وجود ملف المتعامل الاختياري من عدمه
+    if has_operator:
+        green_checks.append(
+            (
+                ("تم تفعيل المطابقة مع ملف المتعامل" if is_ar else "Comparaison activée avec le dossier opérateur"),
+                (
+                    f"تم فحص دفتر الشروط ومقارنته بملف المتعامل ({operator_file_name or 'نص مرفق'}) للتحقق من الاستيفاء وتجنب أسباب الإقصاء."
+                    if is_ar
+                    else f"Audit croisé effectué entre le cahier des charges et le dossier ({operator_file_name or 'texte joint'})."
+                ),
+            )
+        )
+    else:
+        green_checks.append(
+            (
+                ("تدقيق مستقل لدفتر الشروط / الوثيقة المرجعية" if is_ar else "Audit autonome du cahier des charges"),
+                (
+                    "تم تحليل دفتر الشروط وحده (بدون إرفاق ملف متعامل) لاستخراج الشروط الأساسية ونقاط اليقظة."
+                    if is_ar
+                    else "Analyse autonome du cahier des charges effectuée (sans dossier opérateur)."
+                ),
+            )
         )
 
     green_checks.append(
-        ("تحديد طبيعة الوثيقة ومسار العمل" if is_ar else "Identification du document et du parcours"),
         (
-            f"تم تصنيف الوثيقة ضمن ({doc_type}) لمسار ({target_mode}) مع مراعاة متطلبات النزاهة (06-01) والامتثال."
-            if is_ar else
-            f"Document classé sous ({doc_type}) pour le parcours ({target_mode}) avec repères de conformité."
-        ),
-    )
-    green_checks.append(
-        ("السيادة الرقمية وحماية المعطيات" if is_ar else "Souveraineté numérique et confidentialité"),
-        (
-            "إمكانية تشغيل الحل محلياً أو ضمن بيئة داخلية معزولة (Intranet) لحماية سرية المعطيات المؤسسية."
-            if is_ar else
-            "Possibilité de déploiement local ou sur Intranet isolé pour préserver la confidentialité."
-        ),
+            ("السيادة الرقمية وحماية المعطيات" if is_ar else "Souveraineté numérique et confidentialité"),
+            (
+                f"تم تصنيف الملف ضمن ({doc_type}) لمسار ({target_mode}) مع دعم التشغيل الآمن أو الشبكة المعزولة (Intranet)."
+                if is_ar
+                else f"Dossier classé sous ({doc_type}) pour ({target_mode}) avec support Intranet sécurisé."
+            ),
+        )
     )
 
     return {
-        "title": doc_title.strip() or ("وثيقة قيد التدقيق" if is_ar else "Document analysé"),
+        "title": doc_title.strip() or ("دفتر شروط / وثيقة قيد التدقيق" if is_ar else "Document analysé"),
         "doc_type": doc_type,
         "target_mode": target_mode,
-        "char_count": len(clean_text),
+        "has_operator": has_operator,
+        "operator_name": operator_file_name,
+        "char_count": len(clean_cahier) + len(clean_operator),
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "red": red_flags,
         "orange": orange_flags,
@@ -179,13 +217,19 @@ def analyze_document_text(doc_title: str, doc_type: str, target_mode: str, text:
 def build_report_text(report: dict, lang: str) -> str:
     """توليد نص التقرير المنسق للتصدير بصيغ TXT / ZIP."""
     is_ar = lang == "ar"
+    op_status = (
+        (f"مرفق ({report['operator_name']})" if report["has_operator"] else "غير مرفق (تدقيق دفتر الشروط وحده)")
+        if is_ar
+        else (f"Joint ({report['operator_name']})" if report["has_operator"] else "Non joint (Audit autonome)")
+    )
     lines = [
         "==========================================",
         "رصين AI | RASEEN AI — تقرير التدقيق والامتثال" if is_ar else "RASEEN AI — RAPPORT D'AUDIT ET CONFORMITÉ",
         "==========================================",
         f"{'الوثيقة' if is_ar else 'Document'}: {report['title']}",
         f"{'النوع' if is_ar else 'Type'}: {report['doc_type']} | {'المسار' if is_ar else 'Parcours'}: {report['target_mode']}",
-        f"{'التاريخ' if is_ar else 'Date'}: {report['timestamp']} | {'عدد الأحرف' if is_ar else 'Caractères'}: {report['char_count']}",
+        f"{'ملف المتعامل' if is_ar else 'Dossier opérateur'}: {op_status}",
+        f"{'التاريخ' if is_ar else 'Date'}: {report['timestamp']}",
         "",
         "🔴 " + ("أحمر — خطر / مخالفة" if is_ar else "ROUGE — RISQUE / NON-CONFORMITÉ"),
     ]
@@ -246,7 +290,6 @@ def render_payment_section(lang: str = "ar") -> None:
     """عرض الباقات وطرق الدفع المعتمدة لمساري B2B و B2G بدون تكرار لمعرفات العناصر."""
     is_ar = lang == "ar"
 
-    st.markdown("---")
     st.subheader("💳 الباقات وطرق الدفع المعتمدة" if is_ar else "💳 Offres & Modes de Paiement")
 
     plan_options = (
@@ -397,23 +440,29 @@ def render_payment_section(lang: str = "ar") -> None:
 
 
 def render_audit_tab(lang: str) -> None:
-    """عرض واجهة التدقيق الفوري للوثائق والصفقات والعقود."""
+    """واجهة التدقيق بخانتين منفصلتين: دفتر الشروط وحده + ملف المتعامل (اختياري) وحده."""
     is_ar = lang == "ar"
 
-    st.subheader("🔍 تدقيق العقود، دفاتر الشروط، والملفات الإدارية" if is_ar else "🔍 Audit de Contrats, Cahiers des Charges & Dossiers")
-    st.caption(
-        "أداة ذكاء اصطناعي وتدقيق امتثال مصممة للسياق الجزائري مع مراعاة الخصوصية والسيادة الرقمية."
+    st.subheader(
+        "🔍 تدقيق دفاتر الشروط، العقود، وملفات المتعاملين"
         if is_ar
-        else "Outil d'audit et de conformité conçu pour le contexte algérien avec prise en compte de la souveraineté numérique."
+        else "🔍 Audit de Cahiers des Charges, Contrats & Dossiers Opérateurs"
+    )
+    st.caption(
+        "يمكنك رفع دفتر الشروط وحده للتدقيق الفوري، أو إرفاق ملف المتعامل اختيارياً لإجراء المطابقة."
+        if is_ar
+        else "Importez le cahier des charges seul pour un audit direct, ou ajoutez facultativement le dossier opérateur pour comparaison."
     )
 
-    col_a, col_b = st.columns(2)
-    with col_a:
+    # الصف الأول: البيانات التعريفية
+    col_meta1, col_meta2, col_meta3 = st.columns(3)
+    with col_meta1:
         doc_title = st.text_input(
-            "عنوان الوثيقة أو الملف" if is_ar else "Titre du document ou dossier",
+            "عنوان الملف أو المشروع" if is_ar else "Titre du dossier / projet",
             placeholder="مثال: دفتر شروط مشروع إنجاز وتجهيز..." if is_ar else "Ex: Cahier des charges projet...",
             key="raseen_doc_title",
         )
+    with col_meta2:
         doc_type = st.selectbox(
             "نوع الوثيقة" if is_ar else "Type de document",
             (
@@ -423,7 +472,7 @@ def render_audit_tab(lang: str) -> None:
             ),
             key="raseen_doc_type",
         )
-    with col_b:
+    with col_meta3:
         target_mode = st.selectbox(
             "المسار المستهدف" if is_ar else "Parcours cible",
             (
@@ -433,48 +482,90 @@ def render_audit_tab(lang: str) -> None:
             ),
             key="raseen_target_mode",
         )
-        uploaded_file = st.file_uploader(
-            "رفع ملف (`TXT`, `PDF`, `DOCX`, `PNG`, `JPG`)" if is_ar else "Importer un fichier (`TXT`, `PDF`, `DOCX`, `PNG`, `JPG`)",
+
+    st.markdown("---")
+
+    # الصف الثاني: خانتان منفصلتان للرفع (دفتر الشروط وحده + ملف المتعامل الاختياري وحده)
+    col_up1, col_up2 = st.columns(2)
+
+    with col_up1:
+        st.markdown("#### 1️⃣ " + ("دفتر الشروط / الوثيقة المرجعية" if is_ar else "Cahier des Charges / Document principal"))
+        cahier_file = st.file_uploader(
+            "ارفع ملف دفتر الشروط (`PDF`, `DOCX`, `TXT`, `PNG`, `JPG`)"
+            if is_ar
+            else "Importer le cahier des charges (`PDF`, `DOCX`, `TXT`, `PNG`, `JPG`)",
             type=["txt", "pdf", "docx", "png", "jpg", "jpeg"],
-            key="raseen_doc_uploader",
+            key="raseen_cahier_uploader",
         )
 
-    extracted_text = extract_uploaded_text(uploaded_file)
-    default_text = extracted_text if extracted_text else ""
-
-    doc_text = st.text_area(
-        "نص الوثيقة أو البنود المراد تدقيقها" if is_ar else "Texte du document ou clauses à auditer",
-        value=default_text,
-        height=210,
-        placeholder=(
-            "الصق هنا بنود دفتر الشروط أو العقد أو القرار الإداري لبدء التدقيق..."
+    with col_up2:
+        st.markdown("#### 2️⃣ " + ("ملف المتعامل / العرض (اختياري — غير إجباري)" if is_ar else "Dossier de l'opérateur (Optionnel)"))
+        operator_file = st.file_uploader(
+            "ارفع ملف المتعامل للمطابقة إن وُجد (`PDF`, `DOCX`, `TXT`, `PNG`, `JPG`)"
             if is_ar
-            else "Collez ici les clauses du cahier des charges, contrat ou décision administrative..."
+            else "Importer le dossier opérateur si disponible (`PDF`, `DOCX`, `TXT`, `PNG`, `JPG`)",
+            type=["txt", "pdf", "docx", "png", "jpg", "jpeg"],
+            key="raseen_operator_uploader",
+        )
+
+    cahier_extracted = extract_uploaded_text(cahier_file)
+    operator_extracted = extract_uploaded_text(operator_file)
+
+    # منطقة النص لدفتر الشروط (أو لصق البنود مباشرة)
+    cahier_text = st.text_area(
+        "نص دفتر الشروط أو البنود المراد تدقيقها" if is_ar else "Texte du cahier des charges ou clauses à auditer",
+        value=cahier_extracted,
+        height=190,
+        placeholder=(
+            "يظهر هنا النص المستخرج من دفتر الشروط تلقائياً، أو يمكنك لصق البنود مباشرة هنا..."
+            if is_ar
+            else "Le texte extrait du cahier des charges s'affiche ici, ou collez vos clauses directement..."
         ),
-        key="raseen_doc_text_area",
+        key="raseen_cahier_text_area",
     )
 
+    # إظهار معاينة نص ملف المتعامل فقط إذا قام المستخدم برفع ملف متعامل
+    operator_text = ""
+    if operator_file is not None:
+        operator_text = st.text_area(
+            "محتوى ملف المتعامل المرفق (اختياري)" if is_ar else "Contenu du dossier opérateur joint (Optionnel)",
+            value=operator_extracted,
+            height=130,
+            key="raseen_operator_text_area",
+        )
+
     if st.button("🚀 بدء التدقيق الآن" if is_ar else "🚀 Lancer l'audit", type="primary", key="raseen_btn_run_audit"):
-        if doc_text.strip():
-            st.session_state.raseen_audit_report = analyze_document_text(
-                doc_title=doc_title,
+        if cahier_text.strip() or cahier_file is not None:
+            st.session_state.raseen_audit_report = analyze_documents(
+                doc_title=doc_title or (cahier_file.name if cahier_file else ""),
                 doc_type=doc_type,
                 target_mode=target_mode,
-                text=doc_text,
+                cahier_text=cahier_text,
+                operator_text=operator_text,
+                operator_file_name=operator_file.name if operator_file else "",
                 lang=lang,
             )
         else:
             st.warning(
-                "⚠️ يرجى إدخال نص أو رفع ملف قبل بدء التدقيق."
+                "⚠️ يرجى رفع دفتر الشروط أو لصق نصه على الأقل قبل بدء التدقيق (ملف المتعامل يبقى اختيارياً)."
                 if is_ar
-                else "⚠️ Veuillez saisir un texte ou importer un fichier avant de lancer l'audit."
+                else "⚠️ Veuillez importer ou coller le cahier des charges avant de lancer l'audit (le dossier opérateur reste facultatif)."
             )
 
     report = st.session_state.raseen_audit_report
     if report is not None:
         st.markdown("---")
         st.markdown(f"### 📋 {'نتائج التقرير' if is_ar else 'Résultats du rapport'}: {report['title']}")
-        st.caption(f"{report['doc_type']} • {report['target_mode']} • {report['timestamp']}")
+        mode_badge = (
+            ("مع مطابقة ملف المتعامل: " + report["operator_name"])
+            if report["has_operator"]
+            else "تدقيق دفتر الشروط وحده"
+        ) if is_ar else (
+            ("Avec comparaison dossier : " + report["operator_name"])
+            if report["has_operator"]
+            else "Audit autonome du cahier des charges"
+        )
+        st.caption(f"{report['doc_type']} • {report['target_mode']} • {mode_badge} • {report['timestamp']}")
 
         c_red, c_org, c_grn = st.columns(3)
         with c_red:
